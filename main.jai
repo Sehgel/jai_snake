@@ -22,9 +22,9 @@ key_f2 : bool;
 snake : Snake;
 direction : Vector2;
 input := Vector2.{0,0};
-speed : float = 0.35;
+speed : float = 20;
 last_time : float64;
-dt : float64;
+dt : float;
 
 test_x : float;
 test_y : float;
@@ -70,7 +70,7 @@ main :: () {
     quit := false;
     while main := !quit {
         now := seconds_since_init();
-        dt = now - last_time;
+        dt =xx (now - last_time);
 
         event : SDL_Event;
 
@@ -112,6 +112,8 @@ main :: () {
 
         last_time = now;
 
+        //print("\nFPS: %",1/dt);
+
         //Wait routine
         target_delta := 1.0 / cast(float64) FPS_TARGET;
 
@@ -152,7 +154,7 @@ process_logic :: () {
 
     //Move head
     snake.points_last_frame[0] = snake.points[0];
-    snake.points[0] += (direction * speed);
+    snake.points[0] += direction * speed * dt;
 
     //Move body
     for 1..snake.points.count-1 {
@@ -161,7 +163,7 @@ process_logic :: () {
 
         dist := distance(snake.points_last_frame[it-1],snake.points[it]);
 
-        snake.points[it] += new_dir * speed;
+        snake.points[it] += new_dir * speed * dt;
         snake.points_last_frame[it] = snake.points[it];
 
 
@@ -175,10 +177,10 @@ process_logic :: () {
         }
         next_point := snake.dead_parts[it].trace_path[0];
         new_dir := normalize(next_point - snake.dead_parts[it].point);
-        if distance(snake.dead_parts[it].point, next_point) <= 0.5 {
+        snake.dead_parts[it].point += new_dir * speed * dt;
+        if distance(snake.dead_parts[it].point, next_point) <= 2 {
             array_ordered_remove_by_index(*snake.dead_parts[it].trace_path,0);
         }
-        snake.dead_parts[it].point += new_dir * speed;
     }
 
     //Wrap around
@@ -223,7 +225,7 @@ remove_snake_segment :: (index : int, points_left : []Vector2) {
 }
 remove_dead_snake_segment :: (index : int) {
     array_free(snake.dead_parts[index].trace_path);
-    array_unordered_remove_by_index(*snake.dead_parts,index);
+    array_ordered_remove_by_index(*snake.dead_parts,index);
 }
 render_stuff :: () {
     glViewport(0,0,WINDOW_WIDTH,WINDOW_HEIGHT);
@@ -239,19 +241,19 @@ render_stuff :: () {
     draw_quad(snake.points[0],HEAD_SIZE/2);
     //Body
 
+    /*
     for 1..snake.points.count-1 {
-        draw_quad(snake.points[it],0.25);
+        draw_quad(snake.points[it],0.05);
     }
 
     //Dead parts
     for part, index : snake.dead_parts {
-        draw_quad(part.point,0.25);
+        draw_quad(part.point,0.05);
     }
     glEnd();
-
+    */
     //Body
 
-    return;
     //Alive parts
     for 0..snake.points.count-2 {
         scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
