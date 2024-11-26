@@ -22,7 +22,7 @@ key_f2 : bool;
 snake : Snake;
 direction : Vector2;
 input := Vector2.{0,0};
-speed : float = 0.4;
+speed : float = 0.35;
 last_time : float64;
 dt : float64;
 
@@ -130,7 +130,7 @@ main :: () {
 }
 
 prepare :: () {
-    array_add(*snake.points, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
+    array_add(*snake.points, Vector2.{BASE_WIDTH-4,BASE_HEIGHT/2});
     array_add(*snake.points_last_frame, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
 
     for 0..7{
@@ -150,20 +150,11 @@ process_logic :: () {
         add_new_snake_segment();
     }
 
-    //move headh
+    //Move head
     snake.points_last_frame[0] = snake.points[0];
     snake.points[0] += (direction * speed);
 
-    //move body
-    //This works but need to be reversed
-    for 0..snake.points_lost.count-1 {
-        new_dir := normalize(snake.dissappear_points[it] - snake.points_lost[it]);
-        if distance(snake.dissappear_points[it], snake.points_lost[it]) <= 0.5 {
-            remove_dead_snake_segment(it);
-            break;
-        }
-        snake.points_lost[it] += new_dir * speed;
-    }
+    //Move body
     for 1..snake.points.count-1 {
 
         new_dir := snake.points_last_frame[it-1] - snake.points[it];
@@ -175,18 +166,38 @@ process_logic :: () {
 
 
     }
+    //Move dead parts
+
+    for #v2 < 0..snake.dead_parts.count-1 {
+        if snake.dead_parts[it].trace_path.count <= 0{
+            remove_dead_snake_segment(it);
+            continue;
+        }
+        next_point := snake.dead_parts[it].trace_path[0];
+        new_dir := normalize(next_point - snake.dead_parts[it].point);
+        if distance(snake.dead_parts[it].point, next_point) <= 0.5 {
+            array_ordered_remove_by_index(*snake.dead_parts[it].trace_path,0);
+        }
+        snake.dead_parts[it].point += new_dir * speed;
+    }
 
     //Wrap around
-    if snake.points[0].x < 0 || snake.points[0].x > BASE_WIDTH ||
-       snake.points[0].y < 0 || snake.points[0].y > BASE_HEIGHT {
+    if snake.points[0].x < -2 || snake.points[0].x > BASE_WIDTH+2 ||
+       snake.points[0].y < -2 || snake.points[0].y > BASE_HEIGHT+2 {
         dissappear_point := snake.points[0];
-        snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH, BASE_WIDTH);
-        snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT, BASE_HEIGHT);
+        snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+2, BASE_WIDTH+2);
+        snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+2, BASE_HEIGHT+2);
+
         for #v2 < 1..snake.points.count-1 {
-            remove_snake_segment(it,dissappear_point);
+            parts_left : [..]Vector2;
+
+            for #v2 < it2 : 1..it-1 {
+                array_add(*parts_left,snake.points[it2]);
+            }
+            array_add(*parts_left,dissappear_point);
+            remove_snake_segment(it,parts_left);
             add_new_snake_segment(snake.points[0]);
         }
-        print("\nParts left: %",snake.points_lost.count);
     }
 }
 
@@ -204,16 +215,15 @@ add_new_snake_segment :: (pos : Vector2) {
         pos - direction);
 }
 
-remove_snake_segment :: (index : int, dissappear_point : Vector2) {
-    array_add(*snake.points_lost,snake.points[index]);
-    array_add(*snake.dissappear_points,dissappear_point);
+remove_snake_segment :: (index : int, points_left : []Vector2) {
+    array_add(*snake.dead_parts,.{point = snake.points[index], trace_path = points_left});
 
-    array_unordered_remove_by_index(*snake.points,index);
-    array_unordered_remove_by_index(*snake.points_last_frame,index);
+    array_ordered_remove_by_index(*snake.points,index);
+    array_ordered_remove_by_index(*snake.points_last_frame,index);
 }
 remove_dead_snake_segment :: (index : int) {
-    array_unordered_remove_by_index(*snake.points_lost,index);
-    array_unordered_remove_by_index(*snake.dissappear_points,index);
+    array_free(snake.dead_parts[index].trace_path);
+    array_unordered_remove_by_index(*snake.dead_parts,index);
 }
 render_stuff :: () {
     glViewport(0,0,WINDOW_WIDTH,WINDOW_HEIGHT);
@@ -224,19 +234,25 @@ render_stuff :: () {
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    //Head
     glBegin(GL_TRIANGLES);
+    //Head
     draw_quad(snake.points[0],HEAD_SIZE/2);
+    //Body
+
     for 1..snake.points.count-1 {
-        draw_quad(snake.points[it],0.05);
+        draw_quad(snake.points[it],0.25);
     }
-    for point : snake.points_lost {
-        draw_quad(point,0.05);
+
+    //Dead parts
+    for part, index : snake.dead_parts {
+        draw_quad(part.point,0.25);
     }
     glEnd();
 
     //Body
 
+    return;
+    //Alive parts
     for 0..snake.points.count-2 {
         scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
         glLineWidth(PIXEL_SIZE * scale);
@@ -246,18 +262,17 @@ render_stuff :: () {
         draw_line(snake.points[it],snake.points[it+1]);
         glEnd();
     }
-    for 0..snake.points_lost.count-2 {
-        scale : float = (cast(float)it / (snake.points.count-2));
+    //Dead parts
+
+    for 0..snake.dead_parts.count-2 {
+        scale : float = (cast(float)it / (snake.dead_parts.count-2));
         glLineWidth(PIXEL_SIZE * scale);
         glBegin(GL_LINES);
-        dist := distance(snake.points_lost[it],snake.points_lost[it+1]);
+        dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
         if dist > 16.0 then continue;
-        draw_line(snake.points_lost[it],snake.points_lost[it+1]);
+        draw_line(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
         glEnd();
     }
-
-
-
 
 }
 
@@ -291,12 +306,12 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 
 Snake :: struct {
     points : [..]Vector2;
-    points_last_frame : [..]Vector2;
-    points_lost : [..]Vector2;
-    dissappear_points : [..]Vector2;
+    points_last_frame : [..]Vector2;//This crap may have to go at some point
+    dead_parts : [..]DeadPart;
 }
 DeadPart :: struct {
-
+    point : Vector2;
+    trace_path : []Vector2;
 }
 
 #import "Basic";
