@@ -7,6 +7,7 @@ WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
+
 window : Window_Type;
 
 key_left  : bool;
@@ -18,11 +19,10 @@ key_f1 : bool;
 key_f2 : bool;
 
 
-snake : [..]Vector2;
+snake : Snake;
 direction : Vector2;
 input := Vector2.{0,0};
-speed : float = 0.25;
-
+speed : float = 0.4;
 last_time : float64;
 dt : float64;
 
@@ -30,7 +30,6 @@ test_x : float;
 test_y : float;
 
 main :: () {
-
     SDL_Init(SDL_INIT_VIDEO);
 
     window := SDL_CreateWindow("Snake",
@@ -63,6 +62,10 @@ main :: () {
 
     prepare();
 
+    // Enable MSAA
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+    glEnable(GL_MULTISAMPLE);
 
     quit := false;
     while main := !quit {
@@ -127,9 +130,10 @@ main :: () {
 }
 
 prepare :: () {
-    array_add(*snake, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
+    array_add(*snake.points, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
+    array_add(*snake.points_last_frame, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
 
-    for 0..2{
+    for 0..7{
         add_new_snake_segment();
     }
 }
@@ -146,49 +150,115 @@ process_logic :: () {
         add_new_snake_segment();
     }
 
-    //move head
-    snake[0] += (direction * speed);
+    //move headh
+    snake.points_last_frame[0] = snake.points[0];
+    snake.points[0] += (direction * speed);
+
     //move body
-    for 1..snake.count-1 {
-        new_dir := snake[it-1] - snake[it];
-        snake[it] += new_dir * speed;
+    //This works but need to be reversed
+    for 0..snake.points_lost.count-1 {
+        new_dir := normalize(snake.dissappear_points[it] - snake.points_lost[it]);
+        if distance(snake.dissappear_points[it], snake.points_lost[it]) <= 0.5 {
+            remove_dead_snake_segment(it);
+            break;
+        }
+        snake.points_lost[it] += new_dir * speed;
+    }
+    for 1..snake.points.count-1 {
+
+        new_dir := snake.points_last_frame[it-1] - snake.points[it];
+
+        dist := distance(snake.points_last_frame[it-1],snake.points[it]);
+
+        snake.points[it] += new_dir * speed;
+        snake.points_last_frame[it] = snake.points[it];
+
+
     }
 
     //Wrap around
-    for *position : snake {
-        position.x = fmod_cycling(position.x + BASE_WIDTH, BASE_WIDTH);
-        position.y = fmod_cycling(position.y + BASE_HEIGHT, BASE_HEIGHT);
+    if snake.points[0].x < 0 || snake.points[0].x > BASE_WIDTH ||
+       snake.points[0].y < 0 || snake.points[0].y > BASE_HEIGHT {
+        dissappear_point := snake.points[0];
+        snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH, BASE_WIDTH);
+        snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT, BASE_HEIGHT);
+        for #v2 < 1..snake.points.count-1 {
+            remove_snake_segment(it,dissappear_point);
+            add_new_snake_segment(snake.points[0]);
+        }
+        print("\nParts left: %",snake.points_lost.count);
     }
 }
 
 add_new_snake_segment :: () {
-    array_add(*snake,snake[snake.count-1] - direction);
+    array_add(*snake.points,
+        snake.points[snake.points.count-1] - direction);
+    array_add(*snake.points_last_frame,
+        snake.points_last_frame[snake.points_last_frame.count-1] - direction);
 }
 
+add_new_snake_segment :: (pos : Vector2) {
+    array_add(*snake.points,
+        pos - direction);
+    array_add(*snake.points_last_frame,
+        pos - direction);
+}
+
+remove_snake_segment :: (index : int, dissappear_point : Vector2) {
+    array_add(*snake.points_lost,snake.points[index]);
+    array_add(*snake.dissappear_points,dissappear_point);
+
+    array_unordered_remove_by_index(*snake.points,index);
+    array_unordered_remove_by_index(*snake.points_last_frame,index);
+}
+remove_dead_snake_segment :: (index : int) {
+    array_unordered_remove_by_index(*snake.points_lost,index);
+    array_unordered_remove_by_index(*snake.dissappear_points,index);
+}
 render_stuff :: () {
     glViewport(0,0,WINDOW_WIDTH,WINDOW_HEIGHT);
     glEnable(GL_LINE_SMOOTH);
-    glEnable(GL_BLEND);
-    glDepthMask(GL_FALSE);
     glHint(GL_LINE_SMOOTH_HINT,GL_NICEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glClear(GL_COLOR_BUFFER_BIT);
 
     //Head
     glBegin(GL_TRIANGLES);
-    draw_quad(snake[0],HEAD_SIZE/2);
+    draw_quad(snake.points[0],HEAD_SIZE/2);
+    for 1..snake.points.count-1 {
+        draw_quad(snake.points[it],0.05);
+    }
+    for point : snake.points_lost {
+        draw_quad(point,0.05);
+    }
     glEnd();
 
     //Body
-    glLineWidth(PIXEL_SIZE);
-    glBegin(GL_LINES);
-    for 0..snake.count-2 {
-        dist := distance(snake[it],snake[it+1]);
-        if dist > 1.0 then continue;
-        draw_line(snake[it],snake[it+1]);
-        //draw_quad(snake[it+1],0.05);
+
+    for 0..snake.points.count-2 {
+        scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
+        glLineWidth(PIXEL_SIZE * scale);
+        glBegin(GL_LINES);
+        dist := distance(snake.points[it],snake.points[it+1]);
+        if dist > 16.0 then continue;
+        draw_line(snake.points[it],snake.points[it+1]);
+        glEnd();
     }
-    glEnd();
+    for 0..snake.points_lost.count-2 {
+        scale : float = (cast(float)it / (snake.points.count-2));
+        glLineWidth(PIXEL_SIZE * scale);
+        glBegin(GL_LINES);
+        dist := distance(snake.points_lost[it],snake.points_lost[it+1]);
+        if dist > 16.0 then continue;
+        draw_line(snake.points_lost[it],snake.points_lost[it+1]);
+        glEnd();
+    }
+
+
+
+
 }
 
 to_clip_space :: (pos : Vector2) -> Vector2 {
@@ -217,6 +287,16 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
     clip_point2 := to_clip_space(p1);
     glVertex2f(clip_point.x,clip_point.y);
     glVertex2f(clip_point2.x,clip_point2.y);
+}
+
+Snake :: struct {
+    points : [..]Vector2;
+    points_last_frame : [..]Vector2;
+    points_lost : [..]Vector2;
+    dissappear_points : [..]Vector2;
+}
+DeadPart :: struct {
+
 }
 
 #import "Basic";
