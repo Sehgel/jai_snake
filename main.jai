@@ -236,8 +236,10 @@ render_stuff :: () {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    glClearColor(0.369, 0.69, 0.588,1.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    glColor4f(0.086, 0.322, 0.306,1.0);
     glBegin(GL_TRIANGLE_FAN);
     //Head
     draw_circle(snake.points[0],HEAD_SIZE/32,32);
