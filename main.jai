@@ -249,7 +249,6 @@ process_logic :: () {
         }
     }
 }
-
 add_new_snake_segment :: () {
     dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
 
@@ -258,7 +257,6 @@ add_new_snake_segment :: () {
     array_add(*snake.points_last_frame,
         snake.points_last_frame[snake.points_last_frame.count-1] + dir);
 }
-
 add_new_snake_segment :: (pos : Vector2) {
     dir := direction;
 
@@ -267,9 +265,8 @@ add_new_snake_segment :: (pos : Vector2) {
     array_add(*snake.points_last_frame,
         pos - dir);
 }
-
 remove_snake_segment :: (index : int, points_left : []Vector2) {
-    array_add(*snake.dead_parts,.{point = snake.points[index],from = snake.points[index], trace_path = points_left});
+    array_add(*snake.dead_parts,DeadPart.{point = snake.points[index],from = snake.points[index], trace_path = points_left, index_equivalent = index});
 
     array_ordered_remove_by_index(*snake.points,index);
     array_ordered_remove_by_index(*snake.points_last_frame,index);
@@ -312,14 +309,12 @@ render_stuff :: () {
 
     //Alive parts
 
-    part_index : int;
-    part_count := snake.points.count-2 + snake.dead_parts.count-2;
     glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.points.count-2 {
         dist := distance(snake.points[it],snake.points[it+1]);
         if dist > 16.0 then continue;
 
-        scale : float = 1.0 - (cast(float)part_index / part_count);
+        scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
         dir := normalize(snake.points[it+1] - snake.points[it]);
 
         center := snake.points[it];
@@ -327,8 +322,6 @@ render_stuff :: () {
         p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
-        part_index +=1;
-
     }
     glEnd();
 
@@ -344,18 +337,18 @@ render_stuff :: () {
             continue;
         }
 
-        scale : float = (cast(float)part_index / part_count);
+        scale : float = 1.0 - (cast(float)snake.dead_parts[it].index_equivalent / (snake.points.count-2));
         dir := normalize(snake.dead_parts[it+1].point - snake.dead_parts[it].point);
 
         center := snake.dead_parts[it].point;
         p0 := to_clip_space(center + rotate(dir,TAU/4)*scale*HEAD_SIZE);
         p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
+
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
-        part_index +=1;
+
     }
     glEnd();
-
 }
 
 to_clip_space :: (pos : Vector2) -> Vector2 {
@@ -405,6 +398,7 @@ DeadPart :: struct {
     from : Vector2;
     time : float;
     trace_path : []Vector2;
+    index_equivalent : int;
 }
 KeyState :: struct {
     was_just_pressed : bool;
