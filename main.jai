@@ -242,7 +242,7 @@ render_stuff :: () {
     glColor4f(0.086, 0.322, 0.306,1.0);
     glBegin(GL_TRIANGLE_FAN);
     //Head
-    draw_circle(snake.points[0],HEAD_SIZE/32,32);
+    draw_circle(snake.points[0],HEAD_SIZE/16,32);
     glEnd();
 
     //Body
@@ -260,26 +260,34 @@ render_stuff :: () {
     //Body
 
     //Alive parts
+    glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.points.count-2 {
         scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
-        glLineWidth(PIXEL_SIZE * scale);
-        glBegin(GL_LINES);
         dist := distance(snake.points[it],snake.points[it+1]);
         if dist > 16.0 then continue;
-        draw_line(snake.points[it],snake.points[it+1]);
-        glEnd();
+        dir := normalize(snake.points[it+1] - snake.points[it]);
+
+        center := snake.points[it];
+        p0 := to_clip_space(center + rotate(dir,TAU/4)*scale*HEAD_SIZE);
+        p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
+        glVertex2f(p0.x,p0.y);
+        glVertex2f(p1.x,p1.y);
     }
     //Dead parts
 
     for 0..snake.dead_parts.count-2 {
-        scale : float = (cast(float)it / (snake.dead_parts.count-2));
-        glLineWidth(PIXEL_SIZE * scale);
-        glBegin(GL_LINES);
+        scale : float = (cast(float)it / (snake.points.count-2));
         dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
         if dist > 16.0 then continue;
-        draw_line(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
-        glEnd();
+        dir := normalize(snake.dead_parts[it+1].point - snake.dead_parts[it].point);
+
+        center := snake.dead_parts[it].point;
+        p0 := to_clip_space(center + rotate(dir,TAU/4)*scale*HEAD_SIZE);
+        p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
+        glVertex2f(p0.x,p0.y);
+        glVertex2f(p1.x,p1.y);
     }
+    glEnd();
 
 }
 
