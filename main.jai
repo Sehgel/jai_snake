@@ -90,9 +90,21 @@ main :: () {
                     if event.key.keysym.sym == SDLK_F2 key_f2         = true;
 
                     if event.key.keysym.sym == SDLK_UP key_up         = true;
+                    if event.key.keysym.sym == #char "h" key_up       = true;//Beakl43 support
+                    if event.key.keysym.sym == #char "w" key_up       = true;
+
                     if event.key.keysym.sym == SDLK_DOWN key_down     = true;
+                    if event.key.keysym.sym == #char "i" key_down       = true;//Beakl43 support
+                    if event.key.keysym.sym == #char "s" key_down       = true;
+
                     if event.key.keysym.sym == SDLK_RIGHT key_right   = true;
+                    if event.key.keysym.sym == #char "e" key_right       = true;//Beakl43 support
+                    if event.key.keysym.sym == #char "d" key_right       = true;
+
                     if event.key.keysym.sym == SDLK_LEFT key_left     = true;
+                    if event.key.keysym.sym == #char "j" key_left       = true;//Beakl43 support
+                    if event.key.keysym.sym == #char "a" key_left       = true;
+
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = true;
                     if event.key.keysym.sym == SDLK_RETURN{
@@ -109,9 +121,20 @@ main :: () {
                     if event.key.keysym.sym == SDLK_F2 key_f2         = false;
 
                     if event.key.keysym.sym == SDLK_UP key_up         = false;
+                    if event.key.keysym.sym == #char "h" key_up       = false;//Beakl43 support
+                    if event.key.keysym.sym == #char "w" key_up       = false;
+
                     if event.key.keysym.sym == SDLK_DOWN key_down     = false;
+                    if event.key.keysym.sym == #char "i" key_down       = false;//Beakl43 support
+                    if event.key.keysym.sym == #char "s" key_down       = false;
+
                     if event.key.keysym.sym == SDLK_RIGHT key_right   = false;
+                    if event.key.keysym.sym == #char "e" key_right       = false;//Beakl43 support
+                    if event.key.keysym.sym == #char "d" key_right       = false;
+
                     if event.key.keysym.sym == SDLK_LEFT key_left     = false;
+                    if event.key.keysym.sym == #char "j" key_left       = false;//Beakl43 support
+                    if event.key.keysym.sym == #char "a" key_left       = false;
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = false;
                     if event.key.keysym.sym == SDLK_RETURN key_return = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
@@ -294,7 +317,7 @@ render_stuff :: () {
     glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.points.count-2 {
         dist := distance(snake.points[it],snake.points[it+1]);
-        if dist > 1.0 then continue;
+        if dist > 16.0 then continue;
 
         scale : float = 1.0 - (cast(float)part_index / part_count);
         dir := normalize(snake.points[it+1] - snake.points[it]);
@@ -315,7 +338,7 @@ render_stuff :: () {
     glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.dead_parts.count-2 {
         dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
-        if dist > 1.0{//This fixes the bug where the strips would teleport to the other side of the screen when wrapping
+        if dist > 16.0{//This fixes the bug where the strips would teleport to the other side of the screen when wrapping
             glEnd();
             glBegin(GL_TRIANGLE_STRIP);
             continue;
