@@ -32,6 +32,10 @@ test_y : float;
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
 
+    //This seems to be optional
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, xx SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+
     window := SDL_CreateWindow("Snake",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         WINDOW_WIDTH, WINDOW_HEIGHT,
@@ -42,9 +46,6 @@ main :: () {
         print("Couldn't create window: %\n", to_string(SDL_GetError()));
         return;
     }
-
-    //This seems to be optional
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, xx SDL_GL_CONTEXT_PROFILE_CORE);
 
     gl_context := SDL_GL_CreateContext(window);
 
@@ -135,7 +136,7 @@ prepare :: () {
     array_add(*snake.points, Vector2.{BASE_WIDTH-4,BASE_HEIGHT/2});
     array_add(*snake.points_last_frame, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
 
-    for 0..7{
+    for 0..16{
         add_new_snake_segment();
     }
 }
@@ -231,10 +232,13 @@ remove_dead_snake_segment :: (index : int) {
     array_ordered_remove_by_index(*snake.dead_parts,index);
 }
 render_stuff :: () {
-    glEnable(GL_LINE_SMOOTH);
-    glHint(GL_LINE_SMOOTH_HINT,GL_NICEST);
+
+    /*
+    glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+    */
 
     glClearColor(0.369, 0.69, 0.588,1.0);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -264,7 +268,7 @@ render_stuff :: () {
     for 0..snake.points.count-2 {
         scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
         dist := distance(snake.points[it],snake.points[it+1]);
-        if dist > 16.0 then continue;
+        if dist > 31.0 then continue;
         dir := normalize(snake.points[it+1] - snake.points[it]);
 
         center := snake.points[it];
@@ -276,9 +280,9 @@ render_stuff :: () {
     //Dead parts
 
     for 0..snake.dead_parts.count-2 {
-        scale : float = (cast(float)it / (snake.points.count-2));
+        scale : float = (cast(float)it / (snake.dead_parts.count-2));
         dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
-        if dist > 16.0 then continue;
+        if dist > 31.0 then continue;
         dir := normalize(snake.dead_parts[it+1].point - snake.dead_parts[it].point);
 
         center := snake.dead_parts[it].point;
