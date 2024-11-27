@@ -231,7 +231,6 @@ remove_dead_snake_segment :: (index : int) {
     array_ordered_remove_by_index(*snake.dead_parts,index);
 }
 render_stuff :: () {
-    glViewport(0,0,WINDOW_WIDTH,WINDOW_HEIGHT);
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT,GL_NICEST);
     glEnable(GL_BLEND);
@@ -239,11 +238,12 @@ render_stuff :: () {
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glBegin(GL_TRIANGLES);
+    glBegin(GL_TRIANGLE_FAN);
     //Head
-    draw_quad(snake.points[0],HEAD_SIZE/2);
-    //Body
+    draw_circle(snake.points[0],HEAD_SIZE/32,32);
+    glEnd();
 
+    //Body
     /*
     for 1..snake.points.count-1 {
         draw_quad(snake.points[it],0.05);
@@ -301,6 +301,15 @@ draw_quad :: (pos : Vector2, size : float) {
     glVertex2f(p0.x,p0.y);
     glVertex2f(p2.x,p2.y);
     glVertex2f(p3.x,p3.y);
+}
+draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
+    center := to_clip_space(pos);
+    glVertex2f(center.x,center.y);
+    for 0..count {
+        angle_0 := (it / cast(float)count) * TAU;
+        p0 := center + rotate(Vector2.{0,1},angle_0)*radius;
+        glVertex2f(p0.x,p0.y);
+    }
 }
 draw_line :: (p0 : Vector2, p1 : Vector2) {
     clip_point := to_clip_space(p0);
