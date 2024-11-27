@@ -18,6 +18,7 @@ key_space : bool;
 key_f1 : bool;
 key_f2 : bool;
 
+key_return : KeyState;
 
 snake : Snake;
 direction : Vector2;
@@ -25,6 +26,7 @@ input := Vector2.{0,0};
 speed : float = 20;
 last_time : float64;
 dt : float;
+time_scale : float = 1.0;
 
 test_x : float;
 test_y : float;
@@ -71,37 +73,48 @@ main :: () {
     quit := false;
     while main := !quit {
         now := seconds_since_init();
-        dt = xx (now - last_time);
+        dt = xx (now - last_time) * time_scale;
 
         event : SDL_Event;
 
+        if key_return.awaits_reset then key_return.was_just_pressed = false;
+
         while SDL_PollEvent(*event) {
+
 
             if event.type == {
                 case SDL_QUIT;
                     quit = true;
-                case SDL_KEYUP;
-                    if event.key.keysym.sym == SDLK_ESCAPE quit = true;
-
-                    if event.key.keysym.sym == SDLK_F1 key_f1 = false;
-                    if event.key.keysym.sym == SDLK_F2 key_f2 = false;
-
-                    if event.key.keysym.sym == SDLK_UP key_up       = false;
-                    if event.key.keysym.sym == SDLK_DOWN key_down   = false;
-                    if event.key.keysym.sym == SDLK_RIGHT key_right = false;
-                    if event.key.keysym.sym == SDLK_LEFT key_left   = false;
-
-                    if event.key.keysym.sym == SDLK_SPACE key_space   = false;
                 case SDL_KEYDOWN;
-                    if event.key.keysym.sym == SDLK_F1 key_f1 = true;
-                    if event.key.keysym.sym == SDLK_F2 key_f2 = true;
+                    if event.key.keysym.sym == SDLK_F1 key_f1         = true;
+                    if event.key.keysym.sym == SDLK_F2 key_f2         = true;
 
-                    if event.key.keysym.sym == SDLK_UP key_up       = true;
-                    if event.key.keysym.sym == SDLK_DOWN key_down   = true;
-                    if event.key.keysym.sym == SDLK_RIGHT key_right = true;
-                    if event.key.keysym.sym == SDLK_LEFT key_left   = true;
+                    if event.key.keysym.sym == SDLK_UP key_up         = true;
+                    if event.key.keysym.sym == SDLK_DOWN key_down     = true;
+                    if event.key.keysym.sym == SDLK_RIGHT key_right   = true;
+                    if event.key.keysym.sym == SDLK_LEFT key_left     = true;
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = true;
+                    if event.key.keysym.sym == SDLK_RETURN{
+                        key_return.is_pressed = true;
+                        if !key_return.awaits_reset {
+                            key_return.awaits_reset = true;
+                            key_return.was_just_pressed = true;
+                        }
+                    }
+                case SDL_KEYUP;
+                    if event.key.keysym.sym == SDLK_ESCAPE quit       = true;
+
+                    if event.key.keysym.sym == SDLK_F1 key_f1         = false;
+                    if event.key.keysym.sym == SDLK_F2 key_f2         = false;
+
+                    if event.key.keysym.sym == SDLK_UP key_up         = false;
+                    if event.key.keysym.sym == SDLK_DOWN key_down     = false;
+                    if event.key.keysym.sym == SDLK_RIGHT key_right   = false;
+                    if event.key.keysym.sym == SDLK_LEFT key_left     = false;
+
+                    if event.key.keysym.sym == SDLK_SPACE key_space   = false;
+                    if event.key.keysym.sym == SDLK_RETURN key_return = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
             }
         }
 
@@ -142,6 +155,7 @@ prepare :: () {
 }
 process_logic :: () {
 
+
     input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
     input.y = ifx key_down then -1.0 else 0.0 + ifx key_up then 1.0 else 0.0;
 
@@ -151,6 +165,12 @@ process_logic :: () {
 
     if key_space{
         add_new_snake_segment();
+    }
+
+    //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
+    if key_return.was_just_pressed{
+        time_scale = 1.0 - time_scale;
+        print("\nTime scale: %",time_scale);
     }
 
     //Move head
@@ -208,17 +228,21 @@ process_logic :: () {
 }
 
 add_new_snake_segment :: () {
+    dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
+
     array_add(*snake.points,
-        snake.points[snake.points.count-1] - direction);
+        snake.points[snake.points.count-1] + dir);
     array_add(*snake.points_last_frame,
-        snake.points_last_frame[snake.points_last_frame.count-1] - direction);
+        snake.points_last_frame[snake.points_last_frame.count-1] + dir);
 }
 
 add_new_snake_segment :: (pos : Vector2) {
+    dir := direction;
+
     array_add(*snake.points,
-        pos - direction);
+        pos - dir);
     array_add(*snake.points_last_frame,
-        pos - direction);
+        pos - dir);
 }
 
 remove_snake_segment :: (index : int, points_left : []Vector2) {
@@ -264,11 +288,15 @@ render_stuff :: () {
     //Body
 
     //Alive parts
+
+    part_index : int;
+    part_count := snake.points.count-2 + snake.dead_parts.count-2;
     glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.points.count-2 {
-        scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
         dist := distance(snake.points[it],snake.points[it+1]);
-        if dist > 31.0 then continue;
+        if dist > 1.0 then continue;
+
+        scale : float = 1.0 - (cast(float)part_index / part_count);
         dir := normalize(snake.points[it+1] - snake.points[it]);
 
         center := snake.points[it];
@@ -276,6 +304,8 @@ render_stuff :: () {
         p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
+        part_index +=1;
+
     }
     glEnd();
 
@@ -284,13 +314,14 @@ render_stuff :: () {
 
     glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.dead_parts.count-2 {
-        scale : float = (cast(float)it / (snake.dead_parts.count-2));
         dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
-        if dist > 31.0{
+        if dist > 1.0{//This fixes the bug where the strips would teleport to the other side of the screen when wrapping
             glEnd();
             glBegin(GL_TRIANGLE_STRIP);
             continue;
         }
+
+        scale : float = (cast(float)part_index / part_count);
         dir := normalize(snake.dead_parts[it+1].point - snake.dead_parts[it].point);
 
         center := snake.dead_parts[it].point;
@@ -298,6 +329,7 @@ render_stuff :: () {
         p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
+        part_index +=1;
     }
     glEnd();
 
@@ -351,7 +383,11 @@ DeadPart :: struct {
     time : float;
     trace_path : []Vector2;
 }
-
+KeyState :: struct {
+    was_just_pressed : bool;
+    is_pressed : bool;
+    awaits_reset : bool;
+}
 #import "Basic";
 #import "Math";
 #import "Window_Creation";
