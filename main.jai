@@ -70,7 +70,7 @@ main :: () {
     quit := false;
     while main := !quit {
         now := seconds_since_init();
-        dt =xx (now - last_time);
+        dt = xx (now - last_time);
 
         event : SDL_Event;
 
@@ -165,30 +165,33 @@ process_logic :: () {
 
         snake.points[it] += new_dir * speed * dt;
         snake.points_last_frame[it] = snake.points[it];
-
-
     }
-    //Move dead parts
 
+    //Move dead parts
     for #v2 < 0..snake.dead_parts.count-1 {
         if snake.dead_parts[it].trace_path.count <= 0{
             remove_dead_snake_segment(it);
             continue;
         }
-        next_point := snake.dead_parts[it].trace_path[0];
-        new_dir := normalize(next_point - snake.dead_parts[it].point);
-        snake.dead_parts[it].point += new_dir * speed * dt;
-        if distance(snake.dead_parts[it].point, next_point) <= 2 {
+
+        next_point := snake.dead_parts[it].trace_path[0] ;
+        snake.dead_parts[it].time = min(snake.dead_parts[it].time + speed*dt*2,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
+
+        snake.dead_parts[it].point = lerp(snake.dead_parts[it].from,next_point,snake.dead_parts[it].time);
+        if snake.dead_parts[it].time >= 1.0 {
+            snake.dead_parts[it].from = next_point;
+            snake.dead_parts[it].time = 0.0;
             array_ordered_remove_by_index(*snake.dead_parts[it].trace_path,0);
         }
     }
 
     //Wrap around
-    if snake.points[0].x < -2 || snake.points[0].x > BASE_WIDTH+2 ||
-       snake.points[0].y < -2 || snake.points[0].y > BASE_HEIGHT+2 {
+    padding := 1.25;
+    if snake.points[0].x < -padding || snake.points[0].x > BASE_WIDTH +padding ||
+       snake.points[0].y < -padding || snake.points[0].y > BASE_HEIGHT+padding {
         dissappear_point := snake.points[0];
-        snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+2, BASE_WIDTH+2);
-        snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+2, BASE_HEIGHT+2);
+        snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+padding, BASE_WIDTH+padding);
+        snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
         for #v2 < 1..snake.points.count-1 {
             parts_left : [..]Vector2;
@@ -218,7 +221,7 @@ add_new_snake_segment :: (pos : Vector2) {
 }
 
 remove_snake_segment :: (index : int, points_left : []Vector2) {
-    array_add(*snake.dead_parts,.{point = snake.points[index], trace_path = points_left});
+    array_add(*snake.dead_parts,.{point = snake.points[index],from = snake.points[index], trace_path = points_left});
 
     array_ordered_remove_by_index(*snake.points,index);
     array_ordered_remove_by_index(*snake.points_last_frame,index);
@@ -313,6 +316,8 @@ Snake :: struct {
 }
 DeadPart :: struct {
     point : Vector2;
+    from : Vector2;
+    time : float;
     trace_path : []Vector2;
 }
 
