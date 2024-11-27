@@ -277,12 +277,20 @@ render_stuff :: () {
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
     }
-    //Dead parts
+    glEnd();
 
+    //Dead parts
+    //glColor4f(0.75, 0.1, 0.306,1.0); //Debug color
+
+    glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.dead_parts.count-2 {
         scale : float = (cast(float)it / (snake.dead_parts.count-2));
         dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
-        if dist > 31.0 then continue;
+        if dist > 31.0{
+            glEnd();
+            glBegin(GL_TRIANGLE_STRIP);
+            continue;
+        }
         dir := normalize(snake.dead_parts[it+1].point - snake.dead_parts[it].point);
 
         center := snake.dead_parts[it].point;
