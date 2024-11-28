@@ -6,7 +6,7 @@ WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 //DEBUG
-IS_DEBUGGING_GRAPHICS :: false;
+IS_DEBUGGING_GRAPHICS :: true;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -407,6 +407,16 @@ render_stuff :: () {
         }
         glEnd();
     }
+
+    if IS_DEBUGGING_GRAPHICS then
+        glColor4f(0.0, 1.0, 0.0,1.0); //Debug color
+    for 0..snake.points.count-1 {
+        glBegin(GL_LINES);
+        scale : float = 1.0 - (cast(float)it / (snake.points.count));
+        center := snake.points[it];
+        draw_wired_circle(center,scale/PIXEL_SIZE/4,16);
+        glEnd();
+    }
 }
 
 to_clip_space :: (pos : Vector2) -> Vector2 {
@@ -440,6 +450,20 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
         glVertex2f(p0.x,p0.y);
     }
     glEnd();
+}
+draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
+    center := to_clip_space(pos);
+    px := center + Vector2.{0,1}*radius;
+    glVertex2f(px.x,px.y);
+
+    for 1..count {
+        angle_0 := (it / cast(float)count) * TAU;
+        angle_1 := (it / cast(float)count) * TAU;
+        p0 := center + rotate(Vector2.{0,1},angle_0)*radius;
+        p1 := center + rotate(Vector2.{0,1},angle_1)*radius;
+        glVertex2f(p0.x,p0.y);
+        glVertex2f(p1.x,p1.y);
+    }
 }
 draw_line :: (p0 : Vector2, p1 : Vector2) {
     clip_point := to_clip_space(p0);
