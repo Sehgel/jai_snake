@@ -202,7 +202,11 @@ process_logic :: () {
 
     //Move head
     snake.points_last_frame[0] = snake.points[0];
-    snake.points[0] += direction * speed * dt;
+
+    move_dir := direction;
+    move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*0.2;
+    snake.points[0] += move_dir * speed * dt;
+
 
     //Move body
     for 1..snake.points.count-1 {
@@ -232,6 +236,7 @@ process_logic :: () {
             dead_point.time = min(dead_point.time + speed*dt*2,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
 
             dead_point.point = lerp(dead_point.from,next_point,dead_point.time);
+
             if dead_point.time >= 1.0 {
                 dead_point.from = next_point;
                 dead_point.time = 0.0;
@@ -338,6 +343,7 @@ render_stuff :: () {
     }
 
     //Body
+
     //Alive parts
     glColor4f(0.086, 0.322, 0.306,1.0);
 
@@ -377,6 +383,8 @@ render_stuff :: () {
             }
 
             scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.points.count));
+            if j == 0 then
+                print("\nScale: %",scale);
             dir := normalize(snake.dead_segments[i].dead_points[j+1].point - snake.dead_segments[i].dead_points[j].point);
 
             center := snake.dead_segments[i].dead_points[j+1].point;
@@ -387,6 +395,8 @@ render_stuff :: () {
             glVertex2f(p0.x,p0.y);
             glVertex2f(p1.x,p1.y);
         }
+
+        //Extra triangles on the wrap point
         last_index := snake.dead_segments[i].dead_points.count-2;
         if snake.dead_segments[i].dead_points.count > 1 {
             for 1..10 {
@@ -396,7 +406,6 @@ render_stuff :: () {
                         - snake.dead_segments[i].dead_points[last_index].point) * (cast(float)it)*0.1;
 
                 out_dir := snake.dead_segments[i].out_dir;
-                print("\n%",out_dir);
                 dir = rotate(dir, it * 0.1 * -(out_dir.x  * dir.y - out_dir.y * dir.x));
 
                 center := snake.dead_segments[i].out_point + dir * (cast(float)it-1)*0.1;
@@ -408,25 +417,6 @@ render_stuff :: () {
                 glVertex2f(p1.x,p1.y);
             }
         }
-
-        /*
-        last_index := snake.dead_segments[i].dead_points.count-1;
-        if snake.dead_segments[i].dead_points.count > 1 {
-            for 1..4 {
-                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent-it) / (snake.points.count));
-                out_dir := normalize(snake.dead_segments[i].out_dir)*cast(float)it*0.5;
-
-                //dir := normalize(outside_point - snake.dead_segments[i].dead_points[last_index].point);
-                center := snake.dead_segments[i].dead_points[last_index].point + out_dir;
-
-                p0 := to_clip_space(center + rotate(out_dir,TAU/4.0)*scale*HEAD_SIZE);
-                p1 := to_clip_space(center + rotate(out_dir,-TAU/4.0)*scale*HEAD_SIZE);
-
-                glVertex2f(p0.x,p0.y);
-                glVertex2f(p1.x,p1.y);
-            }
-        }
-        */
         glEnd();
     }
 }
