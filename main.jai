@@ -5,6 +5,9 @@ MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
+//DEBUG
+IS_DEBUGGING_GRAPHICS :: true;
+
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
 
@@ -27,6 +30,7 @@ speed : float = 20;
 last_time : float64;
 dt : float;
 time_scale : float = 1.0;
+frame_counter : u64;
 
 test_x : float;
 test_y : float;
@@ -163,13 +167,14 @@ main :: () {
 
 
         reset_temporary_storage();
+        frame_counter+=1;
     }
     SDL_DestroyWindow(window);
     SDL_Quit();
 }
 
 prepare :: () {
-    array_add(*snake.points, Vector2.{BASE_WIDTH-4,BASE_HEIGHT/2});
+    array_add(*snake.points, Vector2.{BASE_WIDTH-3,BASE_HEIGHT/2});
     array_add(*snake.points_last_frame, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
 
     for 0..16{
@@ -211,43 +216,71 @@ process_logic :: () {
         snake.points_last_frame[it] = snake.points[it];
     }
 
+
     //Move dead parts
-    for #v2 < 0..snake.dead_parts.count-1 {
-        if snake.dead_parts[it].trace_path.count <= 0{
-            remove_dead_snake_segment(it);
+    for *segment,i : snake.dead_segments {
+        if segment.dead_points.count <= 0{
+            remove_dead_snake_segment(i);
             continue;
         }
+        for #v2 < *dead_point,j : segment.dead_points {
+            if dead_point.trace_path.count <= 0{
+                //remove_dead_snake_segment(i);
+                remove_dead_snake_point(i,j);
+                break dead_point;
+            }
 
-        next_point := snake.dead_parts[it].trace_path[0] ;
-        snake.dead_parts[it].time = min(snake.dead_parts[it].time + speed*dt*2,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
+            next_point := dead_point.trace_path[0];
+            dead_point.time = min(dead_point.time + speed*dt*2,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
 
-        snake.dead_parts[it].point = lerp(snake.dead_parts[it].from,next_point,snake.dead_parts[it].time);
-        if snake.dead_parts[it].time >= 1.0 {
-            snake.dead_parts[it].from = next_point;
-            snake.dead_parts[it].time = 0.0;
-            array_ordered_remove_by_index(*snake.dead_parts[it].trace_path,0);
+            dead_point.point = lerp(dead_point.from,next_point,dead_point.time);
+            if dead_point.time >= 1.0 {
+                dead_point.from = next_point;
+                dead_point.time = 0.0;
+                array_ordered_remove_by_index(*dead_point.trace_path,0);
+            }
         }
     }
-
     //Wrap around
-    padding := 1.25;
+    padding := 0.0;
     if snake.points[0].x < -padding || snake.points[0].x > BASE_WIDTH +padding ||
        snake.points[0].y < -padding || snake.points[0].y > BASE_HEIGHT+padding {
         dissappear_point := snake.points[0];
         snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+padding, BASE_WIDTH+padding);
         snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
+        add_new_dead_segment();
         for #v2 < 1..snake.points.count-1 {
             parts_left : [..]Vector2;
 
             for #v2 < it2 : 1..it-1 {
                 array_add(*parts_left,snake.points[it2]);
             }
-            array_add(*parts_left,dissappear_point);
-            remove_snake_segment(it,parts_left);
+            //array_add(*parts_left,dissappear_point);
+            add_dead_point_to_last_segment(dissappear_point,it,parts_left);
+            remove_snake_segment(it);
             add_new_snake_segment(snake.points[0]);
         }
     }
+}
+remove_dead_snake_segment :: (index : int) {
+    array_free(snake.dead_segments[index].dead_points);
+    array_ordered_remove_by_index(*snake.dead_segments,index);
+}
+remove_dead_snake_point :: (segment_index : int, point_index : int) {
+    array_free(snake.dead_segments[segment_index].dead_points[point_index].trace_path);
+    array_ordered_remove_by_index(*snake.dead_segments[segment_index].dead_points,point_index);
+}
+add_new_dead_segment :: () {
+    array_add(*snake.dead_segments,.{});
+}
+add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Vector2) {
+    array_add(*snake.dead_segments[snake.dead_segments.count-1].dead_points,DeadPoint.{
+            point = pos,
+            from = pos,
+            trace_path = points_left,
+            index_equivalent = index
+        });
 }
 add_new_snake_segment :: () {
     dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
@@ -265,18 +298,12 @@ add_new_snake_segment :: (pos : Vector2) {
     array_add(*snake.points_last_frame,
         pos - dir);
 }
-remove_snake_segment :: (index : int, points_left : []Vector2) {
-    array_add(*snake.dead_parts,DeadPart.{point = snake.points[index],from = snake.points[index], trace_path = points_left, index_equivalent = index});
 
+remove_snake_segment :: (index : int) {
     array_ordered_remove_by_index(*snake.points,index);
     array_ordered_remove_by_index(*snake.points_last_frame,index);
 }
-remove_dead_snake_segment :: (index : int) {
-    array_free(snake.dead_parts[index].trace_path);
-    array_ordered_remove_by_index(*snake.dead_parts,index);
-}
 render_stuff :: () {
-
     /*
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
@@ -288,33 +315,40 @@ render_stuff :: () {
     glClear(GL_COLOR_BUFFER_BIT);
 
     glColor4f(0.086, 0.322, 0.306,1.0);
-    glBegin(GL_TRIANGLE_FAN);
     //Head
     draw_circle(snake.points[0],HEAD_SIZE/16,32);
-    glEnd();
 
-    //Body
-    /*
-    for 1..snake.points.count-1 {
-        draw_quad(snake.points[it],0.05);
+    if IS_DEBUGGING_GRAPHICS {
+        //Body
+        for 1..snake.points.count-1 {
+            draw_circle(snake.points[it],0.01);
+        }
+
+        if IS_DEBUGGING_GRAPHICS then
+            glColor4f(0.75, 0.1, 0.306,1.0); //Debug color
+
+        //Dead parts
+        for i : 0..snake.dead_segments.count-1 {
+            for j : 0..snake.dead_segments[i].dead_points.count-1 {
+                draw_circle(snake.dead_segments[i].dead_points[j].point,0.01);
+            }
+        }
     }
 
-    //Dead parts
-    for part, index : snake.dead_parts {
-        draw_quad(part.point,0.05);
-    }
-    glEnd();
-    */
     //Body
-
     //Alive parts
+    glColor4f(0.086, 0.322, 0.306,1.0);
 
     glBegin(GL_TRIANGLE_STRIP);
     for 0..snake.points.count-2 {
         dist := distance(snake.points[it],snake.points[it+1]);
-        if dist > 16.0 then continue;
+        if dist > 16.0 {
+            glEnd();
+            glBegin(GL_TRIANGLE_STRIP);
+            continue;
+        }
 
-        scale : float = 1.0 - (cast(float)it / (snake.points.count-2));
+        scale : float = 1.0 - (cast(float)it / (snake.points.count));
         dir := normalize(snake.points[it+1] - snake.points[it]);
 
         center := snake.points[it];
@@ -326,28 +360,51 @@ render_stuff :: () {
     glEnd();
 
     //Dead parts
-    //glColor4f(0.75, 0.1, 0.306,1.0); //Debug color
+    if IS_DEBUGGING_GRAPHICS then
+        glColor4f(0.75, 0.1, 0.306,1.0); //Debug color
 
     glBegin(GL_TRIANGLE_STRIP);
-    for 0..snake.dead_parts.count-2 {
-        dist := distance(snake.dead_parts[it].point,snake.dead_parts[it+1].point);
-        if dist > 16.0{//This fixes the bug where the strips would teleport to the other side of the screen when wrapping
-            glEnd();
-            glBegin(GL_TRIANGLE_STRIP);
-            continue;
+    for i : 0..snake.dead_segments.count-1 {
+        for j : 0..snake.dead_segments[i].dead_points.count-2 {
+            dist := distance(snake.dead_segments[i].dead_points[j].point,snake.dead_segments[i].dead_points[j+1].point);
+            if dist > 16.0 {
+                glEnd();
+                glBegin(GL_TRIANGLE_STRIP);
+                continue;
+            }
+            scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.points.count));
+            dir := normalize(snake.dead_segments[i].dead_points[j+1].point - snake.dead_segments[i].dead_points[j].point);
+
+            center := snake.dead_segments[i].dead_points[j].point;
+
+            p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
+            p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
+
+            glVertex2f(p0.x,p0.y);
+            glVertex2f(p1.x,p1.y);
         }
-
-        scale : float = 1.0 - (cast(float)snake.dead_parts[it].index_equivalent / (snake.points.count-2));
-        dir := normalize(snake.dead_parts[it+1].point - snake.dead_parts[it].point);
-
-        center := snake.dead_parts[it].point;
-        p0 := to_clip_space(center + rotate(dir,TAU/4)*scale*HEAD_SIZE);
-        p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
-
-        glVertex2f(p0.x,p0.y);
-        glVertex2f(p1.x,p1.y);
-
     }
+    /*
+    for i : 0..snake.dead_segments.count-1 {
+        if snake.dead_segments[i].dead_points.count > 1 {
+
+            for 1..3 {
+                last_index := snake.dead_segments[i].dead_points.count-1;
+
+                scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent / (snake.points.count));
+                dir := normalize(snake.dead_segments[i].dead_points[last_index].point - snake.dead_segments[i].dead_points[last_index-1].point);
+
+                center := snake.dead_segments[i].dead_points[last_index].point + dir*cast(float)it;
+
+                p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
+                p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
+
+                glVertex2f(p0.x,p0.y);
+                glVertex2f(p1.x,p1.y);
+            }
+        }
+    }*/
+
     glEnd();
 }
 
@@ -373,6 +430,7 @@ draw_quad :: (pos : Vector2, size : float) {
     glVertex2f(p3.x,p3.y);
 }
 draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
+    glBegin(GL_TRIANGLE_FAN);
     center := to_clip_space(pos);
     glVertex2f(center.x,center.y);
     for 0..count {
@@ -380,6 +438,7 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
         p0 := center + rotate(Vector2.{0,1},angle_0)*radius;
         glVertex2f(p0.x,p0.y);
     }
+    glEnd();
 }
 draw_line :: (p0 : Vector2, p1 : Vector2) {
     clip_point := to_clip_space(p0);
@@ -390,10 +449,13 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 
 Snake :: struct {
     points : [..]Vector2;
-    points_last_frame : [..]Vector2;//This crap may have to go at some point
-    dead_parts : [..]DeadPart;
+    points_last_frame : [..]Vector2;//@@: This crap may have to go at some point
+    dead_segments : [..]DeadSegment;
 }
-DeadPart :: struct {
+DeadSegment :: struct {
+    dead_points : [..]DeadPoint;
+}
+DeadPoint :: struct {
     point : Vector2;
     from : Vector2;
     time : float;
