@@ -385,18 +385,11 @@ render_stuff :: () {
             glVertex2f(p0.x,p0.y);
             glVertex2f(p1.x,p1.y);
         }
-        glEnd();
-    }
 
-    //Dead parts
-    if IS_DEBUGGING_GRAPHICS then
-        glColor4f(0.3, 0.1, 0.79,1.0); //Debug color
-
-    for i : 0..snake.dead_segments.count-1 {
-        glBegin(GL_TRIANGLE_STRIP);
+        //Extra segments on the warping point
         last_index := snake.dead_segments[i].dead_points.count-2;
         if snake.dead_segments[i].dead_points.count > 2 {
-            for 0..2 {
+            for 0..3 {
                 scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent-(it)) / (snake.points.count));
                 dir := normalize(snake.dead_segments[i].dead_points[last_index].point - snake.dead_segments[i].dead_points[last_index-1].point);
                 center := snake.dead_segments[i].dead_points[last_index].point + dir * cast(float)it;
@@ -410,7 +403,6 @@ render_stuff :: () {
         }
         glEnd();
     }
-
 }
 
 to_clip_space :: (pos : Vector2) -> Vector2 {
