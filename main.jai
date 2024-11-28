@@ -24,7 +24,7 @@ key_f2 : bool;
 key_return : KeyState;
 
 snake : Snake;
-direction : Vector2;
+direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 speed : float = 20;
 last_time : float64;
@@ -174,8 +174,7 @@ main :: () {
 }
 
 prepare :: () {
-    array_add(*snake.points, Vector2.{BASE_WIDTH-3,BASE_HEIGHT/2});
-    array_add(*snake.points_last_frame, Vector2.{BASE_WIDTH/2-1,BASE_HEIGHT/2});
+    array_add(*snake.points, Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2});
 
     for 0..16{
         add_new_alive_point();
@@ -201,7 +200,6 @@ process_logic :: () {
     }
 
     //Move head
-    snake.points_last_frame[0] = snake.points[0];
 
     move_dir := direction;
     move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*0.2;
@@ -211,12 +209,11 @@ process_logic :: () {
     //Move body
     for 1..snake.points.count-1 {
 
-        new_dir := snake.points_last_frame[it-1] - snake.points[it];
+        new_dir := snake.points[it-1] - snake.points[it];
 
-        dist := distance(snake.points_last_frame[it-1],snake.points[it]);
+        dist := distance(snake.points[it-1],snake.points[it]);
 
         snake.points[it] += new_dir * speed * dt;
-        snake.points_last_frame[it] = snake.points[it];
     }
 
 
@@ -292,23 +289,16 @@ add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Ve
 add_new_alive_point :: () {
     dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
 
-    array_add(*snake.points,
-        snake.points[snake.points.count-1] + dir);
-    array_add(*snake.points_last_frame,
-        snake.points_last_frame[snake.points_last_frame.count-1] + dir);
+    array_add(*snake.points, snake.points[snake.points.count-1] + dir);
 }
 add_new_alive_point :: (pos : Vector2) {
     dir := direction;
 
-    array_add(*snake.points,
-        pos - dir);
-    array_add(*snake.points_last_frame,
-        pos - dir);
+    array_add(*snake.points, pos - dir);
 }
 
 remove_alive_point :: (index : int) {
     array_ordered_remove_by_index(*snake.points,index);
-    array_ordered_remove_by_index(*snake.points_last_frame,index);
 }
 render_stuff :: () {
     /*
@@ -383,8 +373,6 @@ render_stuff :: () {
             }
 
             scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.points.count));
-            if j == 0 then
-                print("\nScale: %",scale);
             dir := normalize(snake.dead_segments[i].dead_points[j+1].point - snake.dead_segments[i].dead_points[j].point);
 
             center := snake.dead_segments[i].dead_points[j+1].point;
@@ -462,7 +450,6 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 
 Snake :: struct {
     points : [..]Vector2;
-    points_last_frame : [..]Vector2;//@@: This crap may have to go at some point
     dead_segments : [..]DeadSegment;
 }
 DeadSegment :: struct {
