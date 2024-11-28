@@ -6,7 +6,7 @@ WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 //DEBUG
-IS_DEBUGGING_GRAPHICS :: true;
+IS_DEBUGGING_GRAPHICS :: false;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -387,17 +387,19 @@ render_stuff :: () {
         }
         glEnd();
     }
-    /*
+
+    //Dead parts
+    if IS_DEBUGGING_GRAPHICS then
+        glColor4f(0.3, 0.1, 0.79,1.0); //Debug color
+
     for i : 0..snake.dead_segments.count-1 {
-        if snake.dead_segments[i].dead_points.count > 1 {
-
-            for 1..3 {
-                last_index := snake.dead_segments[i].dead_points.count-1;
-
-                scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent / (snake.points.count));
+        glBegin(GL_TRIANGLE_STRIP);
+        last_index := snake.dead_segments[i].dead_points.count-2;
+        if snake.dead_segments[i].dead_points.count > 2 {
+            for 0..2 {
+                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent-(it)) / (snake.points.count));
                 dir := normalize(snake.dead_segments[i].dead_points[last_index].point - snake.dead_segments[i].dead_points[last_index-1].point);
-
-                center := snake.dead_segments[i].dead_points[last_index].point + dir*cast(float)it;
+                center := snake.dead_segments[i].dead_points[last_index].point + dir * cast(float)it;
 
                 p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
                 p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
@@ -406,7 +408,8 @@ render_stuff :: () {
                 glVertex2f(p1.x,p1.y);
             }
         }
-    }*/
+        glEnd();
+    }
 
 }
 
