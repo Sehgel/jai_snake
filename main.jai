@@ -249,7 +249,9 @@ process_logic :: () {
         snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+padding, BASE_WIDTH+padding);
         snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
-        add_new_dead_segment();
+        add_new_dead_segment(dissappear_point,
+             .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
+               ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
         for #v2 < 1..snake.points.count-1 {
             parts_left : [..]Vector2;
 
@@ -271,8 +273,8 @@ remove_dead_snake_point :: (segment_index : int, point_index : int) {
     array_free(snake.dead_segments[segment_index].dead_points[point_index].trace_path);
     array_ordered_remove_by_index(*snake.dead_segments[segment_index].dead_points,point_index);
 }
-add_new_dead_segment :: () {
-    array_add(*snake.dead_segments,.{});
+add_new_dead_segment :: (warp_point : Vector2, dir : Vector2) {
+    array_add(*snake.dead_segments,.{out_point = warp_point, out_dir = dir});
 }
 add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Vector2) {
     array_add(*snake.dead_segments[snake.dead_segments.count-1].dead_points,DeadPoint.{
@@ -377,7 +379,7 @@ render_stuff :: () {
             scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.points.count));
             dir := normalize(snake.dead_segments[i].dead_points[j+1].point - snake.dead_segments[i].dead_points[j].point);
 
-            center := snake.dead_segments[i].dead_points[j].point;
+            center := snake.dead_segments[i].dead_points[j+1].point;
 
             p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
             p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
@@ -385,22 +387,46 @@ render_stuff :: () {
             glVertex2f(p0.x,p0.y);
             glVertex2f(p1.x,p1.y);
         }
-
-        //Extra segments on the warping point
         last_index := snake.dead_segments[i].dead_points.count-2;
-        if snake.dead_segments[i].dead_points.count > 2 {
-            for 0..3 {
-                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent-(it)) / (snake.points.count));
-                dir := normalize(snake.dead_segments[i].dead_points[last_index].point - snake.dead_segments[i].dead_points[last_index-1].point);
-                center := snake.dead_segments[i].dead_points[last_index].point + dir * cast(float)it;
+        if snake.dead_segments[i].dead_points.count > 1 {
+            for 1..10 {
+                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent) / (snake.points.count));
 
-                p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
-                p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
+                dir := (snake.dead_segments[i].out_point
+                        - snake.dead_segments[i].dead_points[last_index].point) * (cast(float)it)*0.1;
+
+                out_dir := snake.dead_segments[i].out_dir;
+                print("\n%",out_dir);
+                dir = rotate(dir, it * 0.1 * -(out_dir.x  * dir.y - out_dir.y * dir.x));
+
+                center := snake.dead_segments[i].out_point + dir * (cast(float)it-1)*0.1;
+
+                p0 := to_clip_space(center + rotate(normalize(dir),TAU/4.0)*scale*HEAD_SIZE);
+                p1 := to_clip_space(center + rotate(normalize(dir),-TAU/4.0)*scale*HEAD_SIZE);
 
                 glVertex2f(p0.x,p0.y);
                 glVertex2f(p1.x,p1.y);
             }
         }
+
+        /*
+        last_index := snake.dead_segments[i].dead_points.count-1;
+        if snake.dead_segments[i].dead_points.count > 1 {
+            for 1..4 {
+                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent-it) / (snake.points.count));
+                out_dir := normalize(snake.dead_segments[i].out_dir)*cast(float)it*0.5;
+
+                //dir := normalize(outside_point - snake.dead_segments[i].dead_points[last_index].point);
+                center := snake.dead_segments[i].dead_points[last_index].point + out_dir;
+
+                p0 := to_clip_space(center + rotate(out_dir,TAU/4.0)*scale*HEAD_SIZE);
+                p1 := to_clip_space(center + rotate(out_dir,-TAU/4.0)*scale*HEAD_SIZE);
+
+                glVertex2f(p0.x,p0.y);
+                glVertex2f(p1.x,p1.y);
+            }
+        }
+        */
         glEnd();
     }
 }
@@ -451,6 +477,8 @@ Snake :: struct {
 }
 DeadSegment :: struct {
     dead_points : [..]DeadPoint;
+    out_point : Vector2;
+    out_dir : Vector2;
 }
 DeadPoint :: struct {
     point : Vector2;
