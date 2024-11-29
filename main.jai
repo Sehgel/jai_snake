@@ -432,13 +432,22 @@ render_stuff :: () {
     }
 
     if IS_DEBUGGING_GRAPHICS {
-        glColor4f(0.0, 1.0, 0.0,1.0); //Debug color
+        glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
         for 0..snake.points.count-1 {
             glBegin(GL_LINES);
             scale : float = 1.0 - (cast(float)it / (snake.points.count));
             center := snake.points[it];
-            draw_wired_circle(center,scale/PIXEL_SIZE/4,16);
+            draw_wired_circle(center,scale/HEAD_SIZE/4,16);
             glEnd();
+        }
+        for i : 0..snake.dead_segments.count-1 {
+            for j : 0..snake.dead_segments[i].dead_points.count-1 {
+                glBegin(GL_LINES);
+                scale : float = (cast(float)j / (snake.points.count));
+                center := snake.dead_segments[i].dead_points[j].point;
+                draw_wired_circle(center,scale/HEAD_SIZE/4,16);
+                glEnd();
+            }
         }
     }
 }
