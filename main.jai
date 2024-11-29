@@ -1,11 +1,12 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
-FPS_TARGET :: 75;
+FPS_TARGET :: 250;
 MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
-TAIL_POINTS_SKIPPED :: 10;
+TAIL_POINTS_SKIPPED :: 3;
+DISTANCE_BETWEEN_TAIL_POINTS :: 0.5;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -192,9 +193,23 @@ init_game :: () {
     create_base_tail();
     is_alive = true;
 }
+kill :: () {
+    is_alive = false;
+    time_scale = 0;
+    print("\n[%]You lost!",frame_counter);
+}
+restart_game :: () {
+    time_scale = 1.0;
+    destroy_tail();
+    destroy_all_dead_segments();
+    snake.points[0] = CENTER_POINT;
+    direction = .{1,0};
+    create_base_tail();
+    is_alive = true;
+}
 create_base_tail :: () {
-    for 0..16{
-        create_new_alive_point(CENTER_POINT-Vector2.{it+1.0,0});
+    for 0..50{
+        create_new_alive_point(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS,0});
     }
 }
 process_input :: () {
@@ -225,20 +240,6 @@ process_input :: () {
         restart_game();
     }
 }
-kill :: () {
-    is_alive = false;
-    time_scale = 0;
-    print("\n[%]You lost!",frame_counter);
-}
-restart_game :: () {
-    time_scale = 1.0;
-    destroy_tail();
-    destroy_all_dead_segments();
-    snake.points[0] = CENTER_POINT;
-    direction = .{1,0};
-    create_base_tail();
-    is_alive = true;
-}
 process_logic :: () {
     if !is_alive then
         return;
@@ -250,7 +251,7 @@ process_logic :: () {
 
     //Move body
     for 1..snake.points.count-1 {
-        snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],0.5);
+        snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],DISTANCE_BETWEEN_TAIL_POINTS);
     }
 
     //Move dead points
@@ -266,7 +267,7 @@ process_logic :: () {
             }
 
             next_point := dead_point.trace_path[0];
-            dead_point.time = min(dead_point.time + (1/dt)*dead_point.max_trace_count,1.0);
+            dead_point.time = min(dead_point.time + ((speed*dt)/DISTANCE_BETWEEN_TAIL_POINTS),1.0);//@@IMPORTANT: Need to sync up this speed with the alive parts.
 
             dead_point.point = lerp(dead_point.from,next_point,dead_point.time);
 
@@ -298,7 +299,7 @@ process_logic :: () {
             array_add(*parts_left,dissappear_point);
             add_dead_point_to_last_segment(snake.points[it],it,parts_left);
             remove_alive_point(it);
-            create_new_alive_point(snake.points[0]-direction);
+            create_new_alive_point(snake.points[0]-direction*cast(float)it);
         }
     }
 
@@ -521,7 +522,7 @@ check_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -> bool 
 }
 constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
     scale := length(point-anchor);
-    return anchor + (normalize(point-anchor) * distance * ifx scale < 1.0 then scale else 1.0);
+    return anchor + (normalize(point-anchor) * distance);
 }
 to_clip_space :: (pos : Vector2) -> Vector2 {
     return Vector2.{ ((pos.x/BASE_WIDTH) * 2) - 1, ((pos.y/BASE_HEIGHT) * 2) - 1};
