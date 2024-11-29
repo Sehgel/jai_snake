@@ -5,8 +5,6 @@ MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
-//DEBUG
-IS_DEBUGGING_GRAPHICS :: true;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -18,9 +16,8 @@ key_right : bool;
 key_up    : bool;
 key_down  : bool;
 key_space : bool;
-key_f1 : bool;
-key_f2 : bool;
 
+key_f1 : KeyState;
 key_return : KeyState;
 
 snake : Snake;
@@ -35,6 +32,8 @@ frame_counter : u64;
 test_x : float;
 test_y : float;
 
+//DEBUG
+IS_DEBUGGING_GRAPHICS := false;
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -82,6 +81,7 @@ main :: () {
         event : SDL_Event;
 
         if key_return.awaits_reset then key_return.was_just_pressed = false;
+        if key_f1.awaits_reset then key_f1.was_just_pressed = false;
 
         while SDL_PollEvent(*event) {
 
@@ -90,9 +90,6 @@ main :: () {
                 case SDL_QUIT;
                     quit = true;
                 case SDL_KEYDOWN;
-                    if event.key.keysym.sym == SDLK_F1 key_f1         = true;
-                    if event.key.keysym.sym == SDLK_F2 key_f2         = true;
-
                     if event.key.keysym.sym == SDLK_UP key_up         = true;
                     if event.key.keysym.sym == #char "h" key_up       = true;//Beakl43 support
                     if event.key.keysym.sym == #char "w" key_up       = true;
@@ -118,11 +115,15 @@ main :: () {
                             key_return.was_just_pressed = true;
                         }
                     }
+                    if event.key.keysym.sym == SDLK_F1{
+                        key_f1.is_pressed = true;
+                        if !key_f1.awaits_reset {
+                            key_f1.awaits_reset = true;
+                            key_f1.was_just_pressed = true;
+                        }
+                    }
                 case SDL_KEYUP;
                     if event.key.keysym.sym == SDLK_ESCAPE quit       = true;
-
-                    if event.key.keysym.sym == SDLK_F1 key_f1         = false;
-                    if event.key.keysym.sym == SDLK_F2 key_f2         = false;
 
                     if event.key.keysym.sym == SDLK_UP key_up         = false;
                     if event.key.keysym.sym == #char "h" key_up       = false;//Beakl43 support
@@ -142,6 +143,9 @@ main :: () {
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = false;
                     if event.key.keysym.sym == SDLK_RETURN key_return = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+
+                    if event.key.keysym.sym == SDLK_F1 key_f1 = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+
             }
         }
 
@@ -177,7 +181,7 @@ prepare :: () {
     array_add(*snake.points, Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2});
 
     for 0..16{
-        add_new_alive_point();
+        create_new_alive_point();
     }
 }
 process_logic :: () {
@@ -191,12 +195,16 @@ process_logic :: () {
     }
 
     if key_space{
-        add_new_alive_point();
+        create_new_alive_point();
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
     if key_return.was_just_pressed{
         time_scale = ifx time_scale == 1.0 then 0.1 else 1.0;
+    }
+
+    if key_f1.was_just_pressed {
+        IS_DEBUGGING_GRAPHICS = !IS_DEBUGGING_GRAPHICS;
     }
 
     //Move head
@@ -251,7 +259,7 @@ process_logic :: () {
         snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+padding, BASE_WIDTH+padding);
         snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
-        add_new_dead_segment(dissappear_point,
+        create_new_dead_segment(dissappear_point,
              .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
                ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
         for #v2 < 1..snake.points.count-1 {
@@ -263,7 +271,7 @@ process_logic :: () {
             array_add(*parts_left,dissappear_point);
             add_dead_point_to_last_segment(snake.points[it],it,parts_left);
             remove_alive_point(it);
-            add_new_alive_point(snake.points[0]);
+            create_new_alive_point(snake.points[0]);
         }
     }
 }
@@ -275,7 +283,7 @@ remove_dead_snake_point :: (segment_index : int, point_index : int) {
     array_free(snake.dead_segments[segment_index].dead_points[point_index].trace_path);
     array_ordered_remove_by_index(*snake.dead_segments[segment_index].dead_points,point_index);
 }
-add_new_dead_segment :: (warp_point : Vector2, dir : Vector2) {
+create_new_dead_segment :: (warp_point : Vector2, dir : Vector2) {
     array_add(*snake.dead_segments,.{out_point = warp_point, out_dir = dir});
 }
 add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Vector2) {
@@ -286,12 +294,12 @@ add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Ve
             index_equivalent = index
         });
 }
-add_new_alive_point :: () {
+create_new_alive_point :: () {
     dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
 
     array_add(*snake.points, snake.points[snake.points.count-1] + dir);
 }
-add_new_alive_point :: (pos : Vector2) {
+create_new_alive_point :: (pos : Vector2) {
     dir := direction;
 
     array_add(*snake.points, pos - dir);
@@ -359,7 +367,7 @@ render_stuff :: () {
 
     //Dead parts
     if IS_DEBUGGING_GRAPHICS then
-        glColor4f(0.75, 0.1, 0.306,1.0); //Debug color
+        glColor4f(0.3, 1, 0.306,1.0); //Debug color
 
     for i : 0..snake.dead_segments.count-1 {
         glBegin(GL_TRIANGLE_STRIP);
@@ -383,7 +391,6 @@ render_stuff :: () {
             glVertex2f(p0.x,p0.y);
             glVertex2f(p1.x,p1.y);
         }
-
         //Extra triangles on the wrap point
         last_index := snake.dead_segments[i].dead_points.count-2;
         if snake.dead_segments[i].dead_points.count > 1 {
@@ -406,16 +413,36 @@ render_stuff :: () {
             }
         }
         glEnd();
+/*
+        glBegin(GL_TRIANGLES);
+        index_2 := snake.dead_segments[i].dead_points.count-2;
+        index_1 := snake.dead_segments[i].dead_points.count-1;
+        scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[index_2].index_equivalent / (snake.points.count));
+        dir := normalize(snake.dead_segments[i].dead_points[index_1].point - snake.dead_segments[i].dead_points[index_2].point);
+        center := to_clip_space(snake.dead_segments[i].dead_points[index_2].point);
+
+        p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
+        p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
+        glVertex2f(p0.x,p0.y);
+        glVertex2f(p1.x,p1.y);
+
+        last_center := snake.dead_segments[i].dead_points[index_1].point;
+
+        glVertex2f(last_center.x,last_center.y);
+        glEnd();
+*/
+
     }
 
-    if IS_DEBUGGING_GRAPHICS then
+    if IS_DEBUGGING_GRAPHICS {
         glColor4f(0.0, 1.0, 0.0,1.0); //Debug color
-    for 0..snake.points.count-1 {
-        glBegin(GL_LINES);
-        scale : float = 1.0 - (cast(float)it / (snake.points.count));
-        center := snake.points[it];
-        draw_wired_circle(center,scale/PIXEL_SIZE/4,16);
-        glEnd();
+        for 0..snake.points.count-1 {
+            glBegin(GL_LINES);
+            scale : float = 1.0 - (cast(float)it / (snake.points.count));
+            center := snake.points[it];
+            draw_wired_circle(center,scale/PIXEL_SIZE/4,16);
+            glEnd();
+        }
     }
 }
 
