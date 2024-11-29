@@ -223,7 +223,7 @@ process_logic :: () {
     }
 
 
-    //Move dead parts
+    //Move dead points
     for #v2 < *segment,i : snake.dead_segments {
         if segment.dead_points.count <= 0{
             remove_dead_snake_segment(i);
@@ -236,7 +236,7 @@ process_logic :: () {
             }
 
             next_point := dead_point.trace_path[0];
-            dead_point.time = min(dead_point.time + dt*dead_point.trace_path.count*dead_point.trace_path.count,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
+            dead_point.time = min(dead_point.time + (1/dt)*dead_point.max_trace_count,1.0);
 
             dead_point.point = lerp(dead_point.from,next_point,dead_point.time);
 
@@ -288,6 +288,7 @@ add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Ve
             point = pos,
             from = pos,
             trace_path = points_left,
+            max_trace_count = points_left.count,
             index_equivalent = index
         });
 }
@@ -320,24 +321,7 @@ render_stuff :: () {
     //Head
     draw_circle(snake.points[0],HEAD_SIZE,32);
 
-    if IS_DEBUGGING_GRAPHICS {
-        //Body
-        for 1..snake.points.count-1 {
-            draw_circle(snake.points[it],0.01);
-        }
-
-        if IS_DEBUGGING_GRAPHICS then
-            glColor4f(0.75, 0.1, 0.306,1.0); //Debug color
-
-        //Dead parts
-        for i : 0..snake.dead_segments.count-1 {
-            for j : 0..snake.dead_segments[i].dead_points.count-1 {
-                draw_circle(snake.dead_segments[i].dead_points[j].point,0.01);
-            }
-        }
-    }
-
-    //Body
+    //Tail
 
     //Alive parts
     glColor4f(0.086, 0.322, 0.306,1.0);
@@ -430,7 +414,6 @@ render_stuff :: () {
 */
 
     }
-
     if IS_DEBUGGING_GRAPHICS {
         glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
         for 0..snake.points.count-1 {
@@ -447,6 +430,22 @@ render_stuff :: () {
                 center := snake.dead_segments[i].dead_points[j].point;
                 draw_wired_circle(center,scale/HEAD_SIZE/4,16);
                 glEnd();
+            }
+        }
+    }
+
+    //Drawing point dots
+    if IS_DEBUGGING_GRAPHICS {
+        glColor4f(0.0, 0.0, 0.0,1.0); //Debug color
+
+        //Body
+        for 1..snake.points.count-1 {
+            draw_circle(snake.points[it],0.1);
+        }
+        //Dead parts
+        for i : 0..snake.dead_segments.count-1 {
+            for j : 0..snake.dead_segments[i].dead_points.count-1 {
+                draw_circle(snake.dead_segments[i].dead_points[j].point,0.1);
             }
         }
     }
@@ -521,6 +520,7 @@ DeadPoint :: struct {
     from : Vector2;
     time : float;
     trace_path : []Vector2;
+    max_trace_count : int;
     index_equivalent : int;
 }
 KeyState :: struct {
