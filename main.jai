@@ -29,8 +29,8 @@ dt : float;
 time_scale : float = 1.0;
 frame_counter : u64;
 
-test_x : float;
-test_y : float;
+test_point : Vector2;
+test_circle : Vector2;
 
 //DEBUG
 IS_DEBUGGING_GRAPHICS := false;
@@ -178,7 +178,8 @@ main :: () {
 }
 
 prepare :: () {
-    array_add(*snake.points, Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2});
+    test_point = Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
+    create_new_alive_point(Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2});
 
     for 0..16{
         create_new_alive_point();
@@ -193,6 +194,9 @@ process_logic :: () {
     if input != Vector2.{0,0} {
         direction = normalize(input);
     }
+    //Debug
+    test_point.x += direction.x*speed*dt;
+    test_point.y += direction.y*speed*dt;
 
     if key_space{
         create_new_alive_point();
@@ -210,18 +214,15 @@ process_logic :: () {
     //Move head
 
     move_dir := direction;
-    move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*0.2;
+    move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15*dt;
     snake.points[0] += move_dir * speed * dt;
 
-
+    snake.points_last_frame[0] = snake.points[0];
     //Move body
     for 1..snake.points.count-1 {
 
-        new_dir := snake.points[it-1] - snake.points[it];
-
-        dist := distance(snake.points[it-1],snake.points[it]);
-
-        snake.points[it] += new_dir * speed * dt;
+        new_dir := (snake.points[it] - snake.points_last_frame[it-1]);
+        snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],0.75);
     }
 
 
@@ -249,7 +250,6 @@ process_logic :: () {
             }
         }
     }
-
 
     //Wrap around
     padding := 0.0;
@@ -298,30 +298,35 @@ create_new_alive_point :: () {
     dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
 
     array_add(*snake.points, snake.points[snake.points.count-1] + dir);
+    array_add(*snake.points_last_frame, snake.points_last_frame[snake.points_last_frame.count-1] + dir);
 }
 create_new_alive_point :: (pos : Vector2) {
     dir := direction;
 
-    array_add(*snake.points, pos - dir);
+    array_add(*snake.points, pos + dir);
+    array_add(*snake.points_last_frame, pos + dir);
 }
 
 remove_alive_point :: (index : int) {
     array_ordered_remove_by_index(*snake.points,index);
+    array_ordered_remove_by_index(*snake.points_last_frame,index);
 }
 render_stuff :: () {
-    /*
+
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
-    */
+
 
     glClearColor(0.369, 0.69, 0.588,1.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
     glColor4f(0.086, 0.322, 0.306,1.0);
+
+
     //Head
-    draw_circle(snake.points[0],HEAD_SIZE/16,32);
+    draw_circle(snake.points[0],HEAD_SIZE,32);
 
     if IS_DEBUGGING_GRAPHICS {
         //Body
@@ -445,7 +450,10 @@ render_stuff :: () {
         }
     }
 }
-
+constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
+    scale := length(point-anchor);
+    return anchor + (normalize(point-anchor) * distance * ifx scale < 1.0 then scale else 1.0);
+}
 to_clip_space :: (pos : Vector2) -> Vector2 {
     return Vector2.{ ((pos.x/BASE_WIDTH) * 2) - 1, ((pos.y/BASE_HEIGHT) * 2) - 1};
 }
@@ -473,21 +481,20 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
     glVertex2f(center.x,center.y);
     for 0..count {
         angle_0 := (it / cast(float)count) * TAU;
-        p0 := center + rotate(Vector2.{0,1},angle_0)*radius;
+        p0 := to_clip_space(pos + rotate(Vector2.{0,1},angle_0)*radius);
         glVertex2f(p0.x,p0.y);
     }
     glEnd();
 }
 draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
-    center := to_clip_space(pos);
-    px := center + Vector2.{0,1}*radius;
+    px := to_clip_space(pos + Vector2.{0,1}*radius);
     glVertex2f(px.x,px.y);
 
     for 1..count {
         angle_0 := (it / cast(float)count) * TAU;
         angle_1 := (it / cast(float)count) * TAU;
-        p0 := center + rotate(Vector2.{0,1},angle_0)*radius;
-        p1 := center + rotate(Vector2.{0,1},angle_1)*radius;
+        p0 := to_clip_space(pos + rotate(Vector2.{0,1},angle_0)*radius);
+        p1 := to_clip_space(pos + rotate(Vector2.{0,1},angle_1)*radius);
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
     }
@@ -501,6 +508,7 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 
 Snake :: struct {
     points : [..]Vector2;
+    points_last_frame : [..]Vector2;
     dead_segments : [..]DeadSegment;
 }
 DeadSegment :: struct {
