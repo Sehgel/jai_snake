@@ -148,15 +148,14 @@ main :: () {
 
             }
         }
-
+        process_input();
         process_logic();
-
         render_stuff();
         SDL_GL_SwapWindow(window);
 
 
-        last_time = now;
 
+        reset_temporary_storage();
         //print("\nFPS: %",1/dt);
 
         //Wait routine
@@ -169,8 +168,7 @@ main :: () {
 
         while seconds_since_init() < now + target_delta { }
 
-
-        reset_temporary_storage();
+        last_time = now;
         frame_counter+=1;
     }
     SDL_DestroyWindow(window);
@@ -185,9 +183,7 @@ prepare :: () {
         create_new_alive_point();
     }
 }
-process_logic :: () {
-
-
+process_input :: () {
     input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
     input.y = ifx key_down then -1.0 else 0.0 + ifx key_up then 1.0 else 0.0;
 
@@ -210,6 +206,8 @@ process_logic :: () {
     if key_f1.was_just_pressed {
         IS_DEBUGGING_GRAPHICS = !IS_DEBUGGING_GRAPHICS;
     }
+}
+process_logic :: () {
 
     //Move head
 
