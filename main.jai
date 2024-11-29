@@ -1,6 +1,6 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
-FPS_TARGET :: 75;
+FPS_TARGET :: 240;
 MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
@@ -268,7 +268,7 @@ process_logic :: () {
             array_add(*parts_left,dissappear_point);
             add_dead_point_to_last_segment(snake.points[it],it,parts_left);
             remove_alive_point(it);
-            create_new_alive_point(snake.points[0]);
+            create_new_alive_point(snake.points[0]-direction);
         }
     }
 }
@@ -297,9 +297,7 @@ create_new_alive_point :: () {
     array_add(*snake.points, snake.points[snake.points.count-1] + dir);
 }
 create_new_alive_point :: (pos : Vector2) {
-    dir := direction;
-
-    array_add(*snake.points, pos + dir);
+    array_add(*snake.points, pos);
 }
 
 remove_alive_point :: (index : int) {
