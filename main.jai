@@ -4,7 +4,8 @@ FPS_TARGET :: 75;
 MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
-
+CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
+TAIL_POINTS_SKIPPED :: 10;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -19,6 +20,7 @@ key_space : bool;
 
 key_f1 : KeyState;
 key_return : KeyState;
+key_r : KeyState;
 
 snake : Snake;
 direction : Vector2 = .{1,0};
@@ -28,6 +30,7 @@ last_time : float64;
 dt : float;
 time_scale : float = 1.0;
 frame_counter : u64;
+is_alive : bool = false;
 
 test_point : Vector2;
 test_circle : Vector2;
@@ -66,7 +69,7 @@ main :: () {
     print ("GL Vendor = %\n", to_string(glGetString(GL_VENDOR)));
     print ("GL Version = %\n", to_string(glGetString(GL_VERSION)));
 
-    prepare();
+    init_game();
 
     // Enable MSAA
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
@@ -82,6 +85,7 @@ main :: () {
 
         if key_return.awaits_reset then key_return.was_just_pressed = false;
         if key_f1.awaits_reset then key_f1.was_just_pressed = false;
+        if key_r.awaits_reset then key_r.was_just_pressed = false;
 
         while SDL_PollEvent(*event) {
 
@@ -122,6 +126,13 @@ main :: () {
                             key_f1.was_just_pressed = true;
                         }
                     }
+                    if event.key.keysym.sym == #char "r"{
+                        key_r.is_pressed = true;
+                        if !key_r.awaits_reset {
+                            key_r.awaits_reset = true;
+                            key_r.was_just_pressed = true;
+                        }
+                    }
                 case SDL_KEYUP;
                     if event.key.keysym.sym == SDLK_ESCAPE quit       = true;
 
@@ -145,15 +156,15 @@ main :: () {
                     if event.key.keysym.sym == SDLK_RETURN key_return = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
                     if event.key.keysym.sym == SDLK_F1 key_f1 = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == #char "r" key_r = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
             }
         }
+
         process_input();
         process_logic();
         render_stuff();
         SDL_GL_SwapWindow(window);
-
-
 
         reset_temporary_storage();
         //print("\nFPS: %",1/dt);
@@ -175,12 +186,15 @@ main :: () {
     SDL_Quit();
 }
 
-prepare :: () {
-    test_point = Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
-    create_new_alive_point(Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2});
-
+init_game :: () {
+    test_point = CENTER_POINT;
+    create_new_alive_point(CENTER_POINT);
+    create_base_tail();
+    is_alive = true;
+}
+create_base_tail :: () {
     for 0..16{
-        create_new_alive_point();
+        create_new_alive_point(CENTER_POINT-Vector2.{it+1.0,0});
     }
 }
 process_input :: () {
@@ -206,11 +220,30 @@ process_input :: () {
     if key_f1.was_just_pressed {
         IS_DEBUGGING_GRAPHICS = !IS_DEBUGGING_GRAPHICS;
     }
+
+    if key_r.was_just_pressed {
+        restart_game();
+    }
+}
+kill :: () {
+    is_alive = false;
+    time_scale = 0;
+    print("\n[%]You lost!",frame_counter);
+}
+restart_game :: () {
+    time_scale = 1.0;
+    destroy_tail();
+    destroy_all_dead_segments();
+    snake.points[0] = CENTER_POINT;
+    direction = .{1,0};
+    create_base_tail();
+    is_alive = true;
 }
 process_logic :: () {
+    if !is_alive then
+        return;
 
     //Move head
-
     move_dir := direction;
     move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15*dt;
     snake.points[0] += move_dir * speed * dt;
@@ -219,7 +252,6 @@ process_logic :: () {
     for 1..snake.points.count-1 {
         snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],0.5);
     }
-
 
     //Move dead points
     for #v2 < *segment,i : snake.dead_segments {
@@ -268,6 +300,42 @@ process_logic :: () {
             remove_alive_point(it);
             create_new_alive_point(snake.points[0]-direction);
         }
+    }
+
+    //Collision
+    head_pos := snake.points[0];
+
+    for i : TAIL_POINTS_SKIPPED..snake.points.count-1 {
+        scale : float = 1.0 - (cast(float)i / (snake.points.count));
+        if check_collision(head_pos,HEAD_SIZE,snake.points[i],HEAD_SIZE*scale) {
+            kill();
+            break;
+        }
+    }
+
+    //Move dead points
+    for i : 0..snake.dead_segments.count-1 {
+        for j : 0..snake.dead_segments[i].dead_points.count-1 {
+            scale : float = (cast(float)j / (snake.points.count));
+
+            if check_collision(head_pos,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) {
+                kill();
+                break i;
+            }
+        }
+    }
+}
+destroy_tail :: () {
+    for #v2 < 1..snake.points.count-1 {
+        remove_alive_point(it);
+    }
+}
+destroy_all_dead_segments :: () {
+    for #v2 < i : 0..snake.dead_segments.count-1 {
+        for #v2 < j : 0..snake.dead_segments[i].dead_points.count-1 {
+            remove_dead_snake_point(i,j);
+        }
+        remove_dead_snake_segment(i);
     }
 }
 remove_dead_snake_segment :: (index : int) {
@@ -414,11 +482,11 @@ render_stuff :: () {
     }
     if IS_DEBUGGING_GRAPHICS {
         glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
-        for 0..snake.points.count-1 {
+        for TAIL_POINTS_SKIPPED..snake.points.count-1 {
             glBegin(GL_LINES);
             scale : float = 1.0 - (cast(float)it / (snake.points.count));
             center := snake.points[it];
-            draw_wired_circle(center,scale/HEAD_SIZE/4,16);
+            draw_wired_circle(center,scale*HEAD_SIZE,16);
             glEnd();
         }
         for i : 0..snake.dead_segments.count-1 {
@@ -426,7 +494,7 @@ render_stuff :: () {
                 glBegin(GL_LINES);
                 scale : float = (cast(float)j / (snake.points.count));
                 center := snake.dead_segments[i].dead_points[j].point;
-                draw_wired_circle(center,scale/HEAD_SIZE/4,16);
+                draw_wired_circle(center,scale*HEAD_SIZE,16);
                 glEnd();
             }
         }
@@ -448,6 +516,9 @@ render_stuff :: () {
         }
     }
 }
+check_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -> bool {
+    return distance(p0,p1) < (r0 +r1);
+}
 constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
     scale := length(point-anchor);
     return anchor + (normalize(point-anchor) * distance * ifx scale < 1.0 then scale else 1.0);
@@ -455,7 +526,6 @@ constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> 
 to_clip_space :: (pos : Vector2) -> Vector2 {
     return Vector2.{ ((pos.x/BASE_WIDTH) * 2) - 1, ((pos.y/BASE_HEIGHT) * 2) - 1};
 }
-
 to_grid :: (position : Vector2) -> Vector2 {
     return .{floor(position.x),floor(position.y)};
 }
