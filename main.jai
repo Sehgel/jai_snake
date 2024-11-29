@@ -236,7 +236,7 @@ process_logic :: () {
             }
 
             next_point := dead_point.trace_path[0];
-            dead_point.time = min(dead_point.time + speed*dt*2,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
+            dead_point.time = min(dead_point.time + dt*dead_point.trace_path.count*dead_point.trace_path.count,1.0);//@@IMPORTANT: This speed may not be the same as when moving the main parts
 
             dead_point.point = lerp(dead_point.from,next_point,dead_point.time);
 
