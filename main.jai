@@ -217,11 +217,8 @@ process_logic :: () {
     move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15*dt;
     snake.points[0] += move_dir * speed * dt;
 
-    snake.points_last_frame[0] = snake.points[0];
     //Move body
     for 1..snake.points.count-1 {
-
-        new_dir := (snake.points[it] - snake.points_last_frame[it-1]);
         snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],0.75);
     }
 
@@ -298,18 +295,15 @@ create_new_alive_point :: () {
     dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
 
     array_add(*snake.points, snake.points[snake.points.count-1] + dir);
-    array_add(*snake.points_last_frame, snake.points_last_frame[snake.points_last_frame.count-1] + dir);
 }
 create_new_alive_point :: (pos : Vector2) {
     dir := direction;
 
     array_add(*snake.points, pos + dir);
-    array_add(*snake.points_last_frame, pos + dir);
 }
 
 remove_alive_point :: (index : int) {
     array_ordered_remove_by_index(*snake.points,index);
-    array_ordered_remove_by_index(*snake.points_last_frame,index);
 }
 render_stuff :: () {
 
@@ -508,7 +502,6 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 
 Snake :: struct {
     points : [..]Vector2;
-    points_last_frame : [..]Vector2;
     dead_segments : [..]DeadSegment;
 }
 DeadSegment :: struct {
