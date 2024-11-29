@@ -1,6 +1,6 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
-FPS_TARGET :: 240;
+FPS_TARGET :: 75;
 MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
@@ -219,7 +219,7 @@ process_logic :: () {
 
     //Move body
     for 1..snake.points.count-1 {
-        snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],0.75);
+        snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],0.5);
     }
 
 
