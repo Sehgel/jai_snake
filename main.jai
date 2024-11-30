@@ -333,7 +333,7 @@ process_logic :: () {
         }
     }
 
-    //Collision with pickups
+    //Collision of the head with pickups
     for #v2 < pickup,i : pickups {
         if check_collision(head_pos,HEAD_SIZE,pickup.point,pickup.radius) {
             for 0..5 {
@@ -341,6 +341,17 @@ process_logic :: () {
             }
             destroy_pickup(i);
             create_new_pickup_at_random(.APPLE,0.5);
+        }
+    }
+    //Collision of the tail with pickups
+    for tail_point,i : snake.points {
+        for *pickup,j : pickups {
+            dist := distance(pickup.point,tail_point);
+            scale : float = 1.0 - (cast(float)i / (snake.points.count));
+
+            radius := pickup.radius + HEAD_SIZE * scale;
+            if dist < radius then
+                pickup.point = constraint_distance(pickup.point,tail_point,radius);
         }
     }
 }
