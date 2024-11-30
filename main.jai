@@ -1,6 +1,6 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
-FPS_TARGET :: 250;
+FPS_TARGET :: 75;
 MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
@@ -216,7 +216,7 @@ process_input :: () {
     input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
     input.y = ifx key_down then -1.0 else 0.0 + ifx key_up then 1.0 else 0.0;
 
-    if input != Vector2.{0,0} {
+    if input != .{0,0} && (direction + input) != .{0,0} {
         direction = normalize(input);
     }
     //Debug
@@ -246,7 +246,7 @@ process_logic :: () {
 
     //Move head
     move_dir := direction;
-    move_dir += rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15*dt;
+    move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
     snake.points[0] += move_dir * speed * dt;
 
     //Move body
@@ -394,9 +394,15 @@ render_stuff :: () {
     glColor4f(0.086, 0.322, 0.306,1.0);
 
     glBegin(GL_TRIANGLE_STRIP);
+    previous_point := snake.points[0];
     for 0..snake.points.count-2 {
-        dist := distance(snake.points[it],snake.points[it+1]);
-        if dist > 16.0 {
+        dist := distance(previous_point,snake.points[it+1]);
+        if dist <= 0.2 {
+            glEnd();
+            glBegin(GL_TRIANGLE_STRIP);
+            continue;
+        }
+        else if dist > 16.0 {
             glEnd();
             glBegin(GL_TRIANGLE_STRIP);
             continue;
@@ -410,6 +416,7 @@ render_stuff :: () {
         p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
+        previous_point = snake.points[it+1];
     }
     glEnd();
 
