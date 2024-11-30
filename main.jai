@@ -1,12 +1,12 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
-FPS_TARGET :: 75;
+FPS_TARGET :: 240;
 MULTIPLIER :: 16;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
-TAIL_POINTS_SKIPPED :: 3;
-DISTANCE_BETWEEN_TAIL_POINTS :: 0.5;
+TAIL_POINTS_SKIPPED :: 10;
+DISTANCE_BETWEEN_TAIL_POINTS :: 0.25;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -24,6 +24,8 @@ key_return : KeyState;
 key_r : KeyState;
 
 snake : Snake;
+pickups : [..]PickUp;
+
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 speed : float = 20;
@@ -76,6 +78,9 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
     glEnable(GL_MULTISAMPLE);
+
+    //VSync?
+    wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -192,6 +197,8 @@ init_game :: () {
     create_new_alive_point(CENTER_POINT);
     create_base_tail();
     is_alive = true;
+
+    create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
 }
 kill :: () {
     is_alive = false;
@@ -209,7 +216,7 @@ restart_game :: () {
 }
 create_base_tail :: () {
     for 0..50{
-        create_new_alive_point(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS,0});
+        create_new_alive_point(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
     }
 }
 process_input :: () {
@@ -314,7 +321,7 @@ process_logic :: () {
         }
     }
 
-    //Move dead points
+    //Collision with dead points
     for i : 0..snake.dead_segments.count-1 {
         for j : 0..snake.dead_segments[i].dead_points.count-1 {
             scale : float = (cast(float)j / (snake.points.count));
@@ -323,6 +330,17 @@ process_logic :: () {
                 kill();
                 break i;
             }
+        }
+    }
+
+    //Collision with pickups
+    for #v2 < pickup,i : pickups {
+        if check_collision(head_pos,HEAD_SIZE,pickup.point,pickup.radius) {
+            for 0..5 {
+                create_new_alive_point();
+            }
+            destroy_pickup(i);
+            create_new_pickup_at_random(.APPLE,0.5);
         }
     }
 }
@@ -370,6 +388,15 @@ create_new_alive_point :: (pos : Vector2) {
 
 remove_alive_point :: (index : int) {
     array_ordered_remove_by_index(*snake.points,index);
+}
+create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
+    array_add(*pickups,.{point,radius,type});
+}
+create_new_pickup_at_random :: (type : Pickup_Type, radius : float) {
+    array_add(*pickups,.{.{random_get_within_range(0,BASE_WIDTH),random_get_within_range(0,BASE_HEIGHT)},radius,type});
+}
+destroy_pickup :: (index : int) {
+    array_ordered_remove_by_index(*pickups,index);
 }
 render_stuff :: () {
 
@@ -488,6 +515,15 @@ render_stuff :: () {
 */
 
     }
+
+    for pickup : pickups {
+        draw_circle(pickup.point,pickup.radius,16);
+    }
+
+
+
+
+    //Debug drawing...
     if IS_DEBUGGING_GRAPHICS {
         glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
         for TAIL_POINTS_SKIPPED..snake.points.count-1 {
@@ -604,10 +640,20 @@ KeyState :: struct {
     is_pressed : bool;
     awaits_reset : bool;
 }
+PickUp :: struct {
+    point : Vector2;
+    radius : float;
+    type : Pickup_Type;
+}
+Pickup_Type :: enum u32 {
+    APPLE;
+    ORANGE;
+}
 #import "Basic";
 #import "Math";
 #import "Window_Creation";
 #import "GL";
 #import "SDL";
+#import "Random";
 Input :: #import "Input";
 Simp :: #import "Simp";
