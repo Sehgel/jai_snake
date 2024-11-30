@@ -354,6 +354,19 @@ process_logic :: () {
                 pickup.point = constraint_distance(pickup.point,tail_point,radius);
         }
     }
+    //Collision of the dead parts with pickups
+    for segment : snake.dead_segments {
+        for dead_point : segment.dead_points {
+            for *pickup,j : pickups {
+                dist := distance(pickup.point,dead_point.point);
+                scale : float = 1.0 - ((cast(float)dead_point.index_equivalent) / (snake.points.count));
+
+                radius := pickup.radius + HEAD_SIZE * scale;
+                if dist < radius then
+                    pickup.point = constraint_distance(pickup.point,dead_point.point,radius);
+            }
+        }
+    }
 }
 destroy_tail :: () {
     for #v2 < 1..snake.points.count-1 {
