@@ -245,11 +245,10 @@ process_input :: () {
     else
         inputv2.y *= 0.6;
 
-    print("\nInputV2: %",inputv2);
     if input != .{0,0} && (direction + input) != .{0,0} {
-        //direction = normalize(input);
+        direction = normalize(input);
     }
-    direction = (inputv2);
+    //direction = (inputv2);
     //Debug
     test_point.x += direction.x*speed*dt;
     test_point.y += direction.y*speed*dt;
@@ -289,6 +288,30 @@ process_logic :: () {
 
     //Move dead points
     for #v2 < *segment,i : snake.dead_segments {
+        segment.out_point += move_dir * speed * dt;
+
+        prev_point_2 := segment.out_point;
+        was_whole_tail_outside := true;
+        for #v2 < *dead_point,j : segment.dead_points {
+
+            dead_point.point = constraint_distance(dead_point.point,prev_point_2,DISTANCE_BETWEEN_TAIL_POINTS);
+            prev_point_2 = dead_point.point;
+
+            was_whole_tail_outside = was_whole_tail_outside && (dead_point.point.x < 0 || dead_point.point.x > BASE_WIDTH ||
+                                     dead_point.point.y < 0 || dead_point.point.y > BASE_HEIGHT);
+        }
+
+        if was_whole_tail_outside {
+            for #v2 < j : 0..segment.dead_points.count-1 {
+                remove_dead_snake_point(i,j);
+            }
+            remove_dead_snake_segment(i);
+            print("\nRemoved segment: %",i);
+        }
+    }
+    /*
+    Old movement system (Trashy)
+    for #v2 < *segment,i : snake.dead_segments {
         if segment.dead_points.count <= 0{
             remove_dead_snake_segment(i);
             continue;
@@ -310,7 +333,7 @@ process_logic :: () {
                 array_ordered_remove_by_index(*dead_point.trace_path,0);
             }
         }
-    }
+    }*/
 
     //Wrap around
     padding := 0.0;
@@ -325,7 +348,6 @@ process_logic :: () {
                ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
 
         //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
-        print("\nDeleted: %",snake.tail.count);
         for #v2 < 0..snake.tail.count-1 {
             trace_path : [..]Vector2;
             for #v2 < it2 : 0..it {
@@ -337,7 +359,6 @@ process_logic :: () {
             remove_from_tail(it);
             add_to_tail(snake.head-direction*cast(float)(it+1));
         }
-        print("\nRegenerated: %",snake.tail.count);
     }
 
     //@@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
@@ -354,12 +375,13 @@ process_logic :: () {
     }
 
     //Collision with the head and the dead points
+
     for i : 0..snake.dead_segments.count-1 {
         for j : 0..snake.dead_segments[i].dead_points.count-1 {
             scale : float = (cast(float)j / (snake.tail.count));
 
             if check_collision(snake.head,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) {
-                print("\nCollided with dead point: %",j);
+                print("\nCollided with dead segment: %",i);
                 print("\nHead at: %, other at: %",snake.head,snake.dead_segments[i].dead_points[j].point);
                 kill();
                 break i;
@@ -683,6 +705,7 @@ Snake :: struct {
 }
 DeadSegment :: struct {
     dead_points : [..]DeadPoint;
+    //dead_head : Vector2;
     out_point : Vector2;
     out_dir : Vector2;
 }
