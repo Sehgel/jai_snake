@@ -28,6 +28,7 @@ pickups : [..]PickUp;
 
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
+inputv2 := Vector2.{0,0};
 speed : float = 20;
 last_time : float64;
 dt : float;
@@ -230,9 +231,25 @@ process_input :: () {
     input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
     input.y = ifx key_down then -1.0 else 0.0 + ifx key_up then 1.0 else 0.0;
 
+    x_state := ifx key_left then -1 else 0.0 + ifx key_right then 1.0 else 0.0;
+    y_state := ifx key_down then -1 else 0.0 + ifx key_up then 1.0 else 0.0;
+
+    strength := 1;
+    if x_state != 0 then
+        inputv2.x = clamp(inputv2.x + x_state*dt*strength,-1.0,1.0);
+    else
+        inputv2.x *= 0.6;
+
+    if y_state != 0 then
+        inputv2.y = clamp(inputv2.y + y_state*dt*strength,-1.0,1.0);
+    else
+        inputv2.y *= 0.6;
+
+    print("\nInputV2: %",inputv2);
     if input != .{0,0} && (direction + input) != .{0,0} {
-        direction = normalize(input);
+        //direction = normalize(input);
     }
+    direction = (inputv2);
     //Debug
     test_point.x += direction.x*speed*dt;
     test_point.y += direction.y*speed*dt;
