@@ -343,6 +343,7 @@ process_logic :: () {
         snake.head.x = fmod_cycling(snake.head.x + BASE_WIDTH+padding, BASE_WIDTH+padding);
         snake.head.y = fmod_cycling(snake.head.y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
+        
         create_new_dead_segment(dissappear_point,
              .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
                ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
@@ -355,7 +356,7 @@ process_logic :: () {
             }
             array_add(*trace_path,dissappear_point);
 
-            add_dead_point_to_last_segment(snake.tail[it],it,trace_path);
+            add_dead_point_to_last_segment(snake.tail[it],it);
             remove_from_tail(it);
             add_to_tail(snake.head-direction*cast(float)(it+1));
         }
@@ -442,18 +443,14 @@ remove_dead_snake_segment :: (index : int) {
     array_ordered_remove_by_index(*snake.dead_segments,index);
 }
 remove_dead_snake_point :: (segment_index : int, point_index : int) {
-    array_free(snake.dead_segments[segment_index].dead_points[point_index].trace_path);
     array_ordered_remove_by_index(*snake.dead_segments[segment_index].dead_points,point_index);
 }
 create_new_dead_segment :: (warp_point : Vector2, dir : Vector2) {
     array_add(*snake.dead_segments,.{out_point = warp_point, out_dir = dir});
 }
-add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Vector2) {
+add_dead_point_to_last_segment ::(pos : Vector2, index : int) {
     array_add(*snake.dead_segments[snake.dead_segments.count-1].dead_points,DeadPoint.{
             point = pos,
-            from = pos,
-            trace_path = points_left,
-            max_trace_count = points_left.count,
             index_equivalent = index
         });
 }
@@ -705,16 +702,11 @@ Snake :: struct {
 }
 DeadSegment :: struct {
     dead_points : [..]DeadPoint;
-    //dead_head : Vector2;
     out_point : Vector2;
     out_dir : Vector2;
 }
 DeadPoint :: struct {
     point : Vector2;
-    from : Vector2;
-    time : float;
-    trace_path : []Vector2;
-    max_trace_count : int;
     index_equivalent : int;
 }
 KeyState :: struct {
