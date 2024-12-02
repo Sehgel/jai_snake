@@ -19,9 +19,9 @@ key_up    : bool;
 key_down  : bool;
 key_space : bool;
 
-key_f1 : KeyState;
-key_return : KeyState;
-key_r : KeyState;
+key_debug_draw : KeyState;
+key_slow_mo : KeyState;
+key_restart : KeyState;
 
 snake : Snake;
 pickups : [..]PickUp;
@@ -89,9 +89,9 @@ main :: () {
 
         event : SDL_Event;
 
-        if key_return.awaits_reset then key_return.was_just_pressed = false;
-        if key_f1.awaits_reset then key_f1.was_just_pressed = false;
-        if key_r.awaits_reset then key_r.was_just_pressed = false;
+        if key_slow_mo.awaits_reset then key_slow_mo.was_just_pressed = false;
+        if key_debug_draw.awaits_reset then key_debug_draw.was_just_pressed = false;
+        if key_restart.awaits_reset then key_restart.was_just_pressed = false;
 
         while SDL_PollEvent(*event) {
 
@@ -119,24 +119,31 @@ main :: () {
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = true;
                     if event.key.keysym.sym == SDLK_RETURN{
-                        key_return.is_pressed = true;
-                        if !key_return.awaits_reset {
-                            key_return.awaits_reset = true;
-                            key_return.was_just_pressed = true;
+                        key_slow_mo.is_pressed = true;
+                        if !key_slow_mo.awaits_reset {
+                            key_slow_mo.awaits_reset = true;
+                            key_slow_mo.was_just_pressed = true;
                         }
                     }
                     if event.key.keysym.sym == SDLK_F1{
-                        key_f1.is_pressed = true;
-                        if !key_f1.awaits_reset {
-                            key_f1.awaits_reset = true;
-                            key_f1.was_just_pressed = true;
+                        key_debug_draw.is_pressed = true;
+                        if !key_debug_draw.awaits_reset {
+                            key_debug_draw.awaits_reset = true;
+                            key_debug_draw.was_just_pressed = true;
                         }
                     }
                     if event.key.keysym.sym == #char "r"{
-                        key_r.is_pressed = true;
-                        if !key_r.awaits_reset {
-                            key_r.awaits_reset = true;
-                            key_r.was_just_pressed = true;
+                        key_restart.is_pressed = true;
+                        if !key_restart.awaits_reset {
+                            key_restart.awaits_reset = true;
+                            key_restart.was_just_pressed = true;
+                        }
+                    }
+                    if event.key.keysym.sym == #char "u"{
+                        key_restart.is_pressed = true;
+                        if !key_restart.awaits_reset {
+                            key_restart.awaits_reset = true;
+                            key_restart.was_just_pressed = true;
                         }
                     }
                 case SDL_KEYUP;
@@ -159,10 +166,11 @@ main :: () {
                     if event.key.keysym.sym == #char "a" key_left       = false;
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = false;
-                    if event.key.keysym.sym == SDLK_RETURN key_return = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == SDLK_RETURN key_slow_mo = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
-                    if event.key.keysym.sym == SDLK_F1 key_f1 = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
-                    if event.key.keysym.sym == #char "r" key_r = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == SDLK_F1 key_debug_draw = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == #char "r" key_restart = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == #char "u" key_restart = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
             }
         }
@@ -194,10 +202,9 @@ main :: () {
 
 init_game :: () {
     test_point = CENTER_POINT;
-    create_new_alive_point(CENTER_POINT);
+    snake.head = CENTER_POINT;
     create_base_tail();
     is_alive = true;
-
     create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
 }
 kill :: () {
@@ -209,14 +216,14 @@ restart_game :: () {
     time_scale = 1.0;
     destroy_tail();
     destroy_all_dead_segments();
-    snake.points[0] = CENTER_POINT;
+    snake.head = CENTER_POINT;
     direction = .{1,0};
     create_base_tail();
     is_alive = true;
 }
 create_base_tail :: () {
-    for 0..50{
-        create_new_alive_point(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
+    for 0..49 {
+        add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
     }
 }
 process_input :: () {
@@ -231,19 +238,19 @@ process_input :: () {
     test_point.y += direction.y*speed*dt;
 
     if key_space{
-        create_new_alive_point();
+        add_to_tail();
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
-    if key_return.was_just_pressed{
+    if key_slow_mo.was_just_pressed{
         time_scale = ifx time_scale == 1.0 then 0.1 else 1.0;
     }
 
-    if key_f1.was_just_pressed {
+    if key_debug_draw.was_just_pressed {
         IS_DEBUGGING_GRAPHICS = !IS_DEBUGGING_GRAPHICS;
     }
 
-    if key_r.was_just_pressed {
+    if key_restart.was_just_pressed {
         restart_game();
     }
 }
@@ -254,11 +261,13 @@ process_logic :: () {
     //Move head
     move_dir := direction;
     move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
-    snake.points[0] += move_dir * speed * dt;
+    snake.head += move_dir * speed * dt;
 
     //Move body
-    for 1..snake.points.count-1 {
-        snake.points[it] = constraint_distance(snake.points[it],snake.points[it-1],DISTANCE_BETWEEN_TAIL_POINTS);
+    prev_point := snake.head;
+    for 0..snake.tail.count-1 {
+        snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
+        prev_point = snake.tail[it];
     }
 
     //Move dead points
@@ -288,45 +297,53 @@ process_logic :: () {
 
     //Wrap around
     padding := 0.0;
-    if snake.points[0].x < -padding || snake.points[0].x > BASE_WIDTH +padding ||
-       snake.points[0].y < -padding || snake.points[0].y > BASE_HEIGHT+padding {
-        dissappear_point := snake.points[0];
-        snake.points[0].x = fmod_cycling(snake.points[0].x + BASE_WIDTH+padding, BASE_WIDTH+padding);
-        snake.points[0].y = fmod_cycling(snake.points[0].y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
+    if snake.head.x < -padding || snake.head.x > BASE_WIDTH +padding ||
+       snake.head.y < -padding || snake.head.y > BASE_HEIGHT+padding {
+        dissappear_point := snake.head;
+        snake.head.x = fmod_cycling(snake.head.x + BASE_WIDTH+padding, BASE_WIDTH+padding);
+        snake.head.y = fmod_cycling(snake.head.y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
         create_new_dead_segment(dissappear_point,
              .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
                ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
-        for #v2 < 1..snake.points.count-1 {
-            parts_left : [..]Vector2;
 
-            for #v2 < it2 : 1..it-1 {
-                array_add(*parts_left,snake.points[it2]);
+        //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
+        print("\nDeleted: %",snake.tail.count);
+        for #v2 < 0..snake.tail.count-1 {
+            trace_path : [..]Vector2;
+            for #v2 < it2 : 0..it {
+                array_add(*trace_path,snake.tail[it2]);
             }
-            array_add(*parts_left,dissappear_point);
-            add_dead_point_to_last_segment(snake.points[it],it,parts_left);
-            remove_alive_point(it);
-            create_new_alive_point(snake.points[0]-direction*cast(float)it);
+            array_add(*trace_path,dissappear_point);
+
+            add_dead_point_to_last_segment(snake.tail[it],it,trace_path);
+            remove_from_tail(it);
+            add_to_tail(snake.head-direction*cast(float)(it+1));
         }
+        print("\nRegenerated: %",snake.tail.count);
     }
 
-    //Collision
-    head_pos := snake.points[0];
+    //@@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
+    //Collision with the dead and the tail
 
-    for i : TAIL_POINTS_SKIPPED..snake.points.count-1 {
-        scale : float = 1.0 - (cast(float)i / (snake.points.count));
-        if check_collision(head_pos,HEAD_SIZE,snake.points[i],HEAD_SIZE*scale) {
+    for i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
+        scale : float = 1.0 - (cast(float)i / (snake.tail.count));
+        if check_collision(snake.head,HEAD_SIZE,snake.tail[i],HEAD_SIZE*scale) {
+            print("\nCollided with tail: %",i);
+            print("\nHead at: %, other at: %",snake.head,snake.tail[i]);
             kill();
             break;
         }
     }
 
-    //Collision with dead points
+    //Collision with the head and the dead points
     for i : 0..snake.dead_segments.count-1 {
         for j : 0..snake.dead_segments[i].dead_points.count-1 {
-            scale : float = (cast(float)j / (snake.points.count));
+            scale : float = (cast(float)j / (snake.tail.count));
 
-            if check_collision(head_pos,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) {
+            if check_collision(snake.head,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) {
+                print("\nCollided with dead point: %",j);
+                print("\nHead at: %, other at: %",snake.head,snake.dead_segments[i].dead_points[j].point);
                 kill();
                 break i;
             }
@@ -335,19 +352,19 @@ process_logic :: () {
 
     //Collision of the head with pickups
     for #v2 < pickup,i : pickups {
-        if check_collision(head_pos,HEAD_SIZE,pickup.point,pickup.radius) {
+        if check_collision(snake.head,HEAD_SIZE,pickup.point,pickup.radius) {
             for 0..5 {
-                create_new_alive_point();
+                add_to_tail();
             }
             destroy_pickup(i);
             create_new_pickup_at_random(.APPLE,0.5);
         }
     }
     //Collision of the tail with pickups
-    for tail_point,i : snake.points {
+    for tail_point,i : snake.tail {
         for *pickup,j : pickups {
             dist := distance(pickup.point,tail_point);
-            scale : float = 1.0 - (cast(float)i / (snake.points.count));
+            scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
@@ -359,7 +376,7 @@ process_logic :: () {
         for dead_point : segment.dead_points {
             for *pickup,j : pickups {
                 dist := distance(pickup.point,dead_point.point);
-                scale : float = 1.0 - ((cast(float)dead_point.index_equivalent) / (snake.points.count));
+                scale : float = 1.0 - ((cast(float)dead_point.index_equivalent) / (snake.tail.count));
 
                 radius := pickup.radius + HEAD_SIZE * scale;
                 if dist < radius then
@@ -369,8 +386,8 @@ process_logic :: () {
     }
 }
 destroy_tail :: () {
-    for #v2 < 1..snake.points.count-1 {
-        remove_alive_point(it);
+    for #v2 < 0..snake.tail.count-1 {
+        remove_from_tail(it);
     }
 }
 destroy_all_dead_segments :: () {
@@ -401,17 +418,17 @@ add_dead_point_to_last_segment ::(pos : Vector2, index : int, points_left : []Ve
             index_equivalent = index
         });
 }
-create_new_alive_point :: () {
-    dir := ifx snake.points.count > 1 then snake.points[snake.points.count-1] - snake.points[snake.points.count-2] else direction;
+add_to_tail :: () {
+    dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else direction;
 
-    array_add(*snake.points, snake.points[snake.points.count-1] + dir);
+    array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
 }
-create_new_alive_point :: (pos : Vector2) {
-    array_add(*snake.points, pos);
+add_to_tail :: (pos : Vector2) {
+    array_add(*snake.tail, pos);
 }
 
-remove_alive_point :: (index : int) {
-    array_ordered_remove_by_index(*snake.points,index);
+remove_from_tail :: (index : int) {
+    array_ordered_remove_by_index(*snake.tail,index);
 }
 create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
     array_add(*pickups,.{point,radius,type});
@@ -437,7 +454,7 @@ render_stuff :: () {
 
 
     //Head
-    draw_circle(snake.points[0],HEAD_SIZE,32);
+    draw_circle(snake.head,HEAD_SIZE,32);
 
     //Tail
 
@@ -445,9 +462,9 @@ render_stuff :: () {
     glColor4f(0.086, 0.322, 0.306,1.0);
 
     glBegin(GL_TRIANGLE_STRIP);
-    previous_point := snake.points[0];
-    for 0..snake.points.count-2 {
-        dist := distance(previous_point,snake.points[it+1]);
+    previous_point := snake.head;
+    for 0..snake.tail.count-2 {
+        dist := distance(snake.tail[it], previous_point);
         if dist <= 0.2 {
             glEnd();
             glBegin(GL_TRIANGLE_STRIP);
@@ -459,15 +476,15 @@ render_stuff :: () {
             continue;
         }
 
-        scale : float = 1.0 - (cast(float)it / (snake.points.count));
-        dir := normalize(snake.points[it+1] - snake.points[it]);
+        scale : float = 1.0 - (cast(float)it / (snake.tail.count));
+        dir := normalize(snake.tail[it] - previous_point);
 
-        center := snake.points[it];
+        center := previous_point;
         p0 := to_clip_space(center + rotate(dir,TAU/4)*scale*HEAD_SIZE);
         p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
-        previous_point = snake.points[it+1];
+        previous_point = snake.tail[it];
     }
     glEnd();
 
@@ -486,7 +503,7 @@ render_stuff :: () {
                 continue;
             }
 
-            scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.points.count));
+            scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.tail.count));
             dir := normalize(snake.dead_segments[i].dead_points[j+1].point - snake.dead_segments[i].dead_points[j].point);
 
             center := snake.dead_segments[i].dead_points[j+1].point;
@@ -501,7 +518,7 @@ render_stuff :: () {
         last_index := snake.dead_segments[i].dead_points.count-2;
         if snake.dead_segments[i].dead_points.count > 1 {
             for 1..10 {
-                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent) / (snake.points.count));
+                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent) / (snake.tail.count));
 
                 dir := (snake.dead_segments[i].out_point
                         - snake.dead_segments[i].dead_points[last_index].point) * (cast(float)it)*0.1;
@@ -550,17 +567,17 @@ render_stuff :: () {
     //Debug drawing...
     if IS_DEBUGGING_GRAPHICS {
         glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
-        for TAIL_POINTS_SKIPPED..snake.points.count-1 {
+        for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
             glBegin(GL_LINES);
-            scale : float = 1.0 - (cast(float)it / (snake.points.count));
-            center := snake.points[it];
+            scale : float = 1.0 - (cast(float)it / (snake.tail.count));
+            center := snake.tail[it];
             draw_wired_circle(center,scale*HEAD_SIZE,16);
             glEnd();
         }
         for i : 0..snake.dead_segments.count-1 {
             for j : 0..snake.dead_segments[i].dead_points.count-1 {
                 glBegin(GL_LINES);
-                scale : float = (cast(float)j / (snake.points.count));
+                scale : float = (cast(float)j / (snake.tail.count));
                 center := snake.dead_segments[i].dead_points[j].point;
                 draw_wired_circle(center,scale*HEAD_SIZE,16);
                 glEnd();
@@ -573,8 +590,8 @@ render_stuff :: () {
         glColor4f(0.0, 0.0, 0.0,1.0); //Debug color
 
         //Body
-        for 1..snake.points.count-1 {
-            draw_circle(snake.points[it],0.1);
+        for 0..snake.tail.count-1 {
+            draw_circle(snake.tail[it],0.1);
         }
         //Dead parts
         for i : 0..snake.dead_segments.count-1 {
@@ -643,7 +660,8 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 }
 
 Snake :: struct {
-    points : [..]Vector2;
+    head : Vector2;
+    tail : [..]Vector2;
     dead_segments : [..]DeadSegment;
 }
 DeadSegment :: struct {
