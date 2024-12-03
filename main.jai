@@ -1,15 +1,23 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
+
 FPS_TARGET :: 240;
+
 MULTIPLIER :: 16;
+
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
+
 CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
+
 TAIL_POINTS_SKIPPED :: 10;
 DISTANCE_BETWEEN_TAIL_POINTS :: 0.25;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
+
+//DEBUG
+IS_DEBUGGING_GRAPHICS := false;
 
 window : Window_Type;
 
@@ -39,8 +47,7 @@ is_alive : bool = false;
 test_point : Vector2;
 test_circle : Vector2;
 
-//DEBUG
-IS_DEBUGGING_GRAPHICS := false;
+
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -291,22 +298,28 @@ process_logic :: () {
         segment.out_point += move_dir * speed * dt;
 
         prev_point_2 := segment.out_point;
-        was_whole_tail_outside := true;
+        was_whole_tail_disabled := true;
         for #v2 < *dead_point,j : segment.dead_points {
+
 
             dead_point.point = constraint_distance(dead_point.point,prev_point_2,DISTANCE_BETWEEN_TAIL_POINTS);
             prev_point_2 = dead_point.point;
 
-            was_whole_tail_outside = was_whole_tail_outside && (dead_point.point.x < 0 || dead_point.point.x > BASE_WIDTH ||
-                                     dead_point.point.y < 0 || dead_point.point.y > BASE_HEIGHT);
+            if dead_point.is_disabled then
+                continue;
+
+            if check_if_point_is_outside_game_area(dead_point.point) then
+                dead_point.is_disabled = true;
+
+            was_whole_tail_disabled = was_whole_tail_disabled && dead_point.is_disabled;
         }
 
-        if was_whole_tail_outside {
+        if was_whole_tail_disabled {
             for #v2 < j : 0..segment.dead_points.count-1 {
                 remove_dead_snake_point(i,j);
             }
             remove_dead_snake_segment(i);
-            print("\nRemoved segment: %",i);
+            //print("\nRemoved segment: %",i);
         }
     }
     /*
@@ -334,7 +347,7 @@ process_logic :: () {
             }
         }
     }*/
-
+    print("\nSegments count: %",snake.dead_segments.count);
     //Wrap around
     padding := 0.0;
     if snake.head.x < -padding || snake.head.x > BASE_WIDTH +padding ||
@@ -343,7 +356,7 @@ process_logic :: () {
         snake.head.x = fmod_cycling(snake.head.x + BASE_WIDTH+padding, BASE_WIDTH+padding);
         snake.head.y = fmod_cycling(snake.head.y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
-        
+        //print("\nCreated new segment at: %",dissappear_point);
         create_new_dead_segment(dissappear_point,
              .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
                ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
@@ -381,7 +394,10 @@ process_logic :: () {
         for j : 0..snake.dead_segments[i].dead_points.count-1 {
             scale : float = (cast(float)j / (snake.tail.count));
 
-            if check_collision(snake.head,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) {
+            //@@IMPORTANT: This causes a bug when a ghost tail and the real tail matches and re enters the playfield, killing the snake.
+            //Find a way to disable the parts that already left the playfield
+            if check_collision(snake.head,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) &&
+                !snake.dead_segments[i].dead_points[j].is_disabled {
                 print("\nCollided with dead segment: %",i);
                 print("\nHead at: %, other at: %",snake.head,snake.dead_segments[i].dead_points[j].point);
                 kill();
@@ -424,6 +440,10 @@ process_logic :: () {
             }
         }
     }
+}
+check_if_point_is_outside_game_area :: (point : Vector2) -> bool {
+   return (point.x < 0 || point.x > BASE_WIDTH ||
+           point.y < 0 || point.y > BASE_HEIGHT);
 }
 destroy_tail :: () {
     for #v2 < 0..snake.tail.count-1 {
@@ -530,10 +550,12 @@ render_stuff :: () {
 
     for i : 0..snake.dead_segments.count-1 {
         glBegin(GL_TRIANGLE_STRIP);
+
         for j : 0..snake.dead_segments[i].dead_points.count-2 {
+
             dist := distance(snake.dead_segments[i].dead_points[j].point,snake.dead_segments[i].dead_points[j+1].point);
 
-            if dist > 16.0 {
+            if dist > 16.0 || snake.dead_segments[i].dead_points[j].is_disabled{
                 glEnd();
                 glBegin(GL_TRIANGLE_STRIP);
                 continue;
@@ -551,7 +573,7 @@ render_stuff :: () {
             glVertex2f(p1.x,p1.y);
         }
         //Extra triangles on the wrap point
-        last_index := snake.dead_segments[i].dead_points.count-2;
+        /*last_index := snake.dead_segments[i].dead_points.count-2;
         if snake.dead_segments[i].dead_points.count > 1 {
             for 1..10 {
                 scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent) / (snake.tail.count));
@@ -571,6 +593,7 @@ render_stuff :: () {
                 glVertex2f(p1.x,p1.y);
             }
         }
+        */
         glEnd();
 /*
         glBegin(GL_TRIANGLES);
@@ -601,22 +624,27 @@ render_stuff :: () {
 
 
     //Debug drawing...
-    if IS_DEBUGGING_GRAPHICS {
-        glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
-        for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
-            glBegin(GL_LINES);
-            scale : float = 1.0 - (cast(float)it / (snake.tail.count));
-            center := snake.tail[it];
-            draw_wired_circle(center,scale*HEAD_SIZE,16);
-            glEnd();
-        }
-        for i : 0..snake.dead_segments.count-1 {
-            for j : 0..snake.dead_segments[i].dead_points.count-1 {
+    //Circle
+    if false {
+        if IS_DEBUGGING_GRAPHICS {
+            glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
+            for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
                 glBegin(GL_LINES);
-                scale : float = (cast(float)j / (snake.tail.count));
-                center := snake.dead_segments[i].dead_points[j].point;
+                scale : float = 1.0 - (cast(float)it / (snake.tail.count));
+                center := snake.tail[it];
                 draw_wired_circle(center,scale*HEAD_SIZE,16);
                 glEnd();
+            }
+            for i : 0..snake.dead_segments.count-1 {
+                for j : 0..snake.dead_segments[i].dead_points.count-1 {
+                    if snake.dead_segments[i].dead_points[j].is_disabled then
+                        continue;
+                    glBegin(GL_LINES);
+                    scale : float = (cast(float)j / (snake.tail.count));
+                    center := snake.dead_segments[i].dead_points[j].point;
+                    draw_wired_circle(center,scale*HEAD_SIZE,16);
+                    glEnd();
+                }
             }
         }
     }
@@ -708,6 +736,7 @@ DeadSegment :: struct {
 DeadPoint :: struct {
     point : Vector2;
     index_equivalent : int;
+    is_disabled : bool;
 }
 KeyState :: struct {
     was_just_pressed : bool;
