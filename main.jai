@@ -363,11 +363,11 @@ process_logic :: () {
 
         //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
         for #v2 < 0..snake.tail.count-1 {
-            trace_path : [..]Vector2;
+            trace_path := NewArray(it+2,Vector2);
             for #v2 < it2 : 0..it {
-                array_add(*trace_path,snake.tail[it2]);
+                trace_path[it2] = snake.tail[it2];
             }
-            array_add(*trace_path,dissappear_point);
+            trace_path[trace_path.count-1] = dissappear_point;
 
             add_dead_point_to_last_segment(snake.tail[it],it);
             remove_from_tail(it);
@@ -555,7 +555,7 @@ render_stuff :: () {
 
             dist := distance(snake.dead_segments[i].dead_points[j].point,snake.dead_segments[i].dead_points[j+1].point);
 
-            if dist > 16.0 || snake.dead_segments[i].dead_points[j].is_disabled{
+            if dist > 16.0{
                 glEnd();
                 glBegin(GL_TRIANGLE_STRIP);
                 continue;
