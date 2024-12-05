@@ -30,6 +30,7 @@ key_space : bool;
 key_debug_draw : KeyState;
 key_slow_mo : KeyState;
 key_restart : KeyState;
+key_pause : KeyState;
 
 snake : Snake;
 pickups : [..]PickUp;
@@ -100,6 +101,7 @@ main :: () {
         if key_slow_mo.awaits_reset then key_slow_mo.was_just_pressed = false;
         if key_debug_draw.awaits_reset then key_debug_draw.was_just_pressed = false;
         if key_restart.awaits_reset then key_restart.was_just_pressed = false;
+        if key_pause.awaits_reset then key_pause.was_just_pressed = false;
 
         while SDL_PollEvent(*event) {
 
@@ -154,6 +156,13 @@ main :: () {
                             key_restart.was_just_pressed = true;
                         }
                     }
+                    if event.key.keysym.sym == #char "p"{
+                        key_pause.is_pressed = true;
+                        if !key_pause.awaits_reset {
+                            key_pause.awaits_reset = true;
+                            key_pause.was_just_pressed = true;
+                        }
+                    }
                 case SDL_KEYUP;
                     if event.key.keysym.sym == SDLK_ESCAPE quit       = true;
 
@@ -179,6 +188,7 @@ main :: () {
                     if event.key.keysym.sym == SDLK_F1 key_debug_draw = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
                     if event.key.keysym.sym == #char "r" key_restart = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
                     if event.key.keysym.sym == #char "u" key_restart = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == #char "p" key_pause = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
             }
         }
@@ -265,8 +275,15 @@ process_input :: () {
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
-    if key_slow_mo.was_just_pressed{
+    if key_slow_mo.was_just_pressed {
         time_scale = ifx time_scale == 1.0 then 0.1 else 1.0;
+    }
+
+    if key_pause.was_just_pressed {
+        if time_scale > 0.0 then
+            time_scale = 0.0;
+        else
+            time_scale = 1.0;
     }
 
     if key_debug_draw.was_just_pressed {
@@ -300,7 +317,6 @@ process_logic :: () {
         prev_point_2 := segment.out_point;
         found_any_enabled := false;
         for #v2 < *dead_point,j : segment.dead_points {
-
 
             dead_point.point = constraint_distance(dead_point.point,prev_point_2,DISTANCE_BETWEEN_TAIL_POINTS);
             prev_point_2 = dead_point.point;
@@ -339,10 +355,10 @@ process_logic :: () {
         warp_offset := snake.head - dissappear_point;
         //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
         for #v2 < 0..snake.tail.count-1 {
-            last_point := snake.tail[it];
-            add_dead_point_to_last_segment(last_point,it);
+            //warp_point := snake.tail[it] + warp_offset + normalize(warp_offset) * DISTANCE_BETWEEN_TAIL_POINTS*2;
+            add_dead_point_to_last_segment(snake.tail[it],it);
             remove_from_tail(it);
-            add_to_tail(last_point + warp_offset + normalize(warp_offset));
+            add_to_tail(snake.head-direction*cast(float)(it+1));
         }
     }
 
@@ -549,47 +565,8 @@ render_stuff :: () {
             glVertex2f(p1.x,p1.y);
             out_point = snake.dead_segments[i].dead_points[j].point;
         }
-        //Extra triangles on the wrap point
-        /*last_index := snake.dead_segments[i].dead_points.count-2;
-        if snake.dead_segments[i].dead_points.count > 1 {
-            for 1..10 {
-                scale : float = 1.0 - ((cast(float)snake.dead_segments[i].dead_points[last_index].index_equivalent) / (snake.tail.count));
 
-                dir := (snake.dead_segments[i].out_point
-                        - snake.dead_segments[i].dead_points[last_index].point) * (cast(float)it)*0.1;
-
-                out_dir := snake.dead_segments[i].out_dir;
-                dir = rotate(dir, it * 0.1 * -(out_dir.x  * dir.y - out_dir.y * dir.x));
-
-                center := snake.dead_segments[i].out_point + dir * (cast(float)it-1)*0.1;
-
-                p0 := to_clip_space(center + rotate(normalize(dir),TAU/4.0)*scale*HEAD_SIZE);
-                p1 := to_clip_space(center + rotate(normalize(dir),-TAU/4.0)*scale*HEAD_SIZE);
-
-                glVertex2f(p0.x,p0.y);
-                glVertex2f(p1.x,p1.y);
-            }
-        }
-        */
         glEnd();
-/*
-        glBegin(GL_TRIANGLES);
-        index_2 := snake.dead_segments[i].dead_points.count-2;
-        index_1 := snake.dead_segments[i].dead_points.count-1;
-        scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[index_2].index_equivalent / (snake.points.count));
-        dir := normalize(snake.dead_segments[i].dead_points[index_1].point - snake.dead_segments[i].dead_points[index_2].point);
-        center := to_clip_space(snake.dead_segments[i].dead_points[index_2].point);
-
-        p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
-        p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
-        glVertex2f(p0.x,p0.y);
-        glVertex2f(p1.x,p1.y);
-
-        last_center := snake.dead_segments[i].dead_points[index_1].point;
-
-        glVertex2f(last_center.x,last_center.y);
-        glEnd();
-*/
 
     }
 
