@@ -35,6 +35,7 @@ key_pause : KeyState;
 snake : Snake;
 pickups : [..]PickUp;
 
+viewports : [..]Vector2;
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 inputv2 := Vector2.{0,0};
@@ -47,7 +48,6 @@ is_alive : bool = false;
 
 test_point : Vector2;
 test_circle : Vector2;
-
 
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
@@ -219,17 +219,20 @@ main :: () {
 }
 
 init_game :: () {
+    array_add(*viewports,.{32,0});
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
     create_base_tail();
     is_alive = true;
     create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
 }
+
 kill :: () {
     is_alive = false;
     time_scale = 0;
     print("\n[%]You lost!",frame_counter);
 }
+
 restart_game :: () {
     time_scale = 1.0;
     destroy_tail();
@@ -239,11 +242,13 @@ restart_game :: () {
     create_base_tail();
     is_alive = true;
 }
+
 create_base_tail :: () {
     for 0..49 {
         add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
     }
 }
+
 process_input :: () {
     input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
     input.y = ifx key_down then -1.0 else 0.0 + ifx key_up then 1.0 else 0.0;
@@ -294,6 +299,7 @@ process_input :: () {
         restart_game();
     }
 }
+
 process_logic :: () {
     if !is_alive then
         return;
@@ -339,26 +345,28 @@ process_logic :: () {
             print("\nRemoved segment: %",i);
         }
     }
+
     //print("\nSegments count: %",snake.dead_segments.count);
     //Wrap around
     padding := 0.0;
     if is_outside_game_area(snake.head) {
         dissappear_point := snake.head;
-        snake.head.x = fmod_cycling(snake.head.x + BASE_WIDTH+padding, BASE_WIDTH+padding);
-        snake.head.y = fmod_cycling(snake.head.y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
+        //snake.head.x = fmod_cycling(snake.head.x + BASE_WIDTH+padding, BASE_WIDTH+padding);
+        //snake.head.y = fmod_cycling(snake.head.y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
 
-        //Create new segment just when the head warped
-        create_new_dead_segment(dissappear_point,
-             .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
-               ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
+        if false {
+            //Create new segment just when the head warped
+            create_new_dead_segment(dissappear_point,
+                 .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
+                   ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
 
-        warp_offset := snake.head - dissappear_point;
-        //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
-        for #v2 < 0..snake.tail.count-1 {
-            //warp_point := snake.tail[it] + warp_offset + normalize(warp_offset) * DISTANCE_BETWEEN_TAIL_POINTS*2;
-            add_dead_point_to_last_segment(snake.tail[it],it);
-            remove_from_tail(it);
-            add_to_tail(snake.head-direction*cast(float)(it+1));
+            //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
+            for #v2 < 0..snake.tail.count-1 {
+                //warp_point := snake.tail[it] + warp_offset + normalize(warp_offset) * DISTANCE_BETWEEN_TAIL_POINTS*2;
+                add_dead_point_to_last_segment(snake.tail[it],it);
+                remove_from_tail(it);
+                add_to_tail(snake.head-direction*cast(float)(it+1));
+            }
         }
     }
 
@@ -428,15 +436,18 @@ process_logic :: () {
         }
     }
 }
+
 is_outside_game_area :: (point : Vector2) -> bool {
    return (point.x < 0 || point.x > BASE_WIDTH ||
            point.y < 0 || point.y > BASE_HEIGHT);
 }
+
 destroy_tail :: () {
     for #v2 < 0..snake.tail.count-1 {
         remove_from_tail(it);
     }
 }
+
 destroy_all_dead_segments :: () {
     for #v2 < i : 0..snake.dead_segments.count-1 {
         for #v2 < j : 0..snake.dead_segments[i].dead_points.count-1 {
@@ -445,27 +456,33 @@ destroy_all_dead_segments :: () {
         remove_dead_snake_segment(i);
     }
 }
+
 remove_dead_snake_segment :: (index : int) {
     array_free(snake.dead_segments[index].dead_points);
     array_ordered_remove_by_index(*snake.dead_segments,index);
 }
+
 remove_dead_snake_point :: (segment_index : int, point_index : int) {
     array_ordered_remove_by_index(*snake.dead_segments[segment_index].dead_points,point_index);
 }
+
 create_new_dead_segment :: (warp_point : Vector2, dir : Vector2) {
     array_add(*snake.dead_segments,.{out_point = warp_point, out_dir = dir});
 }
+
 add_dead_point_to_last_segment ::(pos : Vector2, index : int) {
     array_add(*snake.dead_segments[snake.dead_segments.count-1].dead_points,DeadPoint.{
             point = pos,
             index_equivalent = index
         });
 }
+
 add_to_tail :: () {
     dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else direction;
 
     array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
 }
+
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
 }
@@ -473,15 +490,19 @@ add_to_tail :: (pos : Vector2) {
 remove_from_tail :: (index : int) {
     array_ordered_remove_by_index(*snake.tail,index);
 }
+
 create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
     array_add(*pickups,.{point,radius,type});
 }
+
 create_new_pickup_at_random :: (type : Pickup_Type, radius : float) {
     array_add(*pickups,.{.{random_get_within_range(0,BASE_WIDTH),random_get_within_range(0,BASE_HEIGHT)},radius,type});
 }
+
 destroy_pickup :: (index : int) {
     array_ordered_remove_by_index(*pickups,index);
 }
+
 render_stuff :: () {
 
     glEnable(GL_MULTISAMPLE);
@@ -489,52 +510,64 @@ render_stuff :: () {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
 
-
     glClearColor(0.369, 0.69, 0.588,1.0);
     glClear(GL_COLOR_BUFFER_BIT);
 
     glColor4f(0.086, 0.322, 0.306,1.0);
 
+    for viewport : viewports {
 
-    //Head
-    draw_circle(snake.head,HEAD_SIZE,32);
+        width := WINDOW_WIDTH;
+        height := WINDOW_HEIGHT;
+        //Head
+        padding := 8.0;
 
-    //Ghost heads
-    for segment : snake.dead_segments {
-        draw_circle(segment.out_point,HEAD_SIZE,32);
-    }
+        head_pos := snake.head;
+        head_pos = cycle_point(head_pos,padding);
 
-    //Tail
+        glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
+        draw_circle(head_pos,HEAD_SIZE,32);
 
-    //Alive parts
-    glColor4f(0.086, 0.322, 0.306,1.0);
-
-    glBegin(GL_TRIANGLE_STRIP);
-    previous_point := snake.head;
-    for 0..snake.tail.count-1 {
-        dist := distance(snake.tail[it], previous_point);
-        if dist <= 0.2 {
-            glEnd();
-            glBegin(GL_TRIANGLE_STRIP);
-            continue;
-        }
-        else if dist > 16.0 {
-            glEnd();
-            glBegin(GL_TRIANGLE_STRIP);
-            continue;
+        //Ghost heads
+        for segment : snake.dead_segments {
+            draw_circle(segment.out_point,HEAD_SIZE,32);
         }
 
-        scale : float = 1.0 - (cast(float)it / (snake.tail.count));
-        dir := normalize(snake.tail[it] - previous_point);
+        //Tail
 
-        center := previous_point;
-        p0 := to_clip_space(center + rotate(dir,TAU/4)*scale*HEAD_SIZE);
-        p1 := to_clip_space(center + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
-        glVertex2f(p0.x,p0.y);
-        glVertex2f(p1.x,p1.y);
-        previous_point = snake.tail[it];
+        //Alive parts
+        glColor4f(0.086, 0.322, 0.306,1.0);
+
+        glBegin(GL_TRIANGLE_STRIP);
+        previous_point := snake.head;
+        for 0..snake.tail.count-1 {
+            center_cycled := previous_point;
+            center_cycled = cycle_point(center_cycled,padding);
+
+            tail_cycled := snake.tail[it];
+            tail_cycled = cycle_point(tail_cycled,padding);
+
+            dist := distance(tail_cycled, center_cycled);
+
+            previous_point = tail_cycled;
+            if dist > 16.0 {
+                glEnd();
+                glBegin(GL_TRIANGLE_STRIP);
+                continue;
+            }
+
+            scale : float = 1.0 - (cast(float)it / (snake.tail.count));
+            dir := normalize(tail_cycled - center_cycled);
+
+            p0 := to_clip_space(center_cycled + rotate(dir, TAU/4)*scale*HEAD_SIZE);
+            p1 := to_clip_space(center_cycled + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
+
+            glVertex2f(p0.x,p0.y);
+            glVertex2f(p1.x,p1.y);
+        }
+        glEnd();
+
     }
-    glEnd();
 
     //Dead parts
     if IS_DEBUGGING_GRAPHICS then
@@ -573,9 +606,6 @@ render_stuff :: () {
     for pickup : pickups {
         draw_circle(pickup.point,pickup.radius,16);
     }
-
-
-
 
     //Debug drawing...
     //Circle
@@ -619,19 +649,29 @@ render_stuff :: () {
         }
     }
 }
+
+cycle_point :: (point : Vector2, padding : float = 0.0) -> Vector2 {
+    return .{fmod_cycling(point.x + BASE_WIDTH ,  BASE_WIDTH),
+             fmod_cycling(point.y + BASE_HEIGHT,  BASE_HEIGHT)};
+}
+
 check_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -> bool {
     return distance(p0,p1) < (r0 +r1);
 }
+
 constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
     scale := length(point-anchor);
     return anchor + (normalize(point-anchor) * distance);
 }
+
 to_clip_space :: (pos : Vector2) -> Vector2 {
     return Vector2.{ ((pos.x/BASE_WIDTH) * 2) - 1, ((pos.y/BASE_HEIGHT) * 2) - 1};
 }
+
 to_grid :: (position : Vector2) -> Vector2 {
     return .{floor(position.x),floor(position.y)};
 }
+
 draw_quad :: (pos : Vector2, size : float) {
     p0 := to_clip_space(pos + Vector2.{-size , size});
     p1 := to_clip_space(pos + Vector2.{-size ,-size});
@@ -646,6 +686,7 @@ draw_quad :: (pos : Vector2, size : float) {
     glVertex2f(p2.x,p2.y);
     glVertex2f(p3.x,p3.y);
 }
+
 draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
     glBegin(GL_TRIANGLE_FAN);
     center := to_clip_space(pos);
@@ -657,6 +698,7 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
     }
     glEnd();
 }
+
 draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
     px := to_clip_space(pos + Vector2.{0,1}*radius);
     glVertex2f(px.x,px.y);
@@ -670,6 +712,7 @@ draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
         glVertex2f(p1.x,p1.y);
     }
 }
+
 draw_line :: (p0 : Vector2, p1 : Vector2) {
     clip_point := to_clip_space(p0);
     clip_point2 := to_clip_space(p1);
