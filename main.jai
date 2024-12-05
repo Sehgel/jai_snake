@@ -347,7 +347,7 @@ process_logic :: () {
             }
         }
     }*/
-    print("\nSegments count: %",snake.dead_segments.count);
+    //print("\nSegments count: %",snake.dead_segments.count);
     //Wrap around
     padding := 0.0;
     if snake.head.x < -padding || snake.head.x > BASE_WIDTH +padding ||
@@ -363,12 +363,6 @@ process_logic :: () {
 
         //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
         for #v2 < 0..snake.tail.count-1 {
-            trace_path := NewArray(it+2,Vector2);
-            for #v2 < it2 : 0..it {
-                trace_path[it2] = snake.tail[it2];
-            }
-            trace_path[trace_path.count-1] = dissappear_point;
-
             add_dead_point_to_last_segment(snake.tail[it],it);
             remove_from_tail(it);
             add_to_tail(snake.head-direction*cast(float)(it+1));
