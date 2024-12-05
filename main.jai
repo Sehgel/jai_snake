@@ -236,7 +236,6 @@ kill :: () {
 restart_game :: () {
     time_scale = 1.0;
     destroy_tail();
-    destroy_all_dead_segments();
     snake.head = CENTER_POINT;
     direction = .{1,0};
     create_base_tail();
@@ -316,60 +315,6 @@ process_logic :: () {
         prev_point = snake.tail[it];
     }
 
-    //Move dead points
-    for #v2 < *segment,i : snake.dead_segments {
-        segment.out_point += move_dir * speed * dt;
-
-        prev_point_2 := segment.out_point;
-        found_any_enabled := false;
-        for #v2 < *dead_point,j : segment.dead_points {
-
-            dead_point.point = constraint_distance(dead_point.point,prev_point_2,DISTANCE_BETWEEN_TAIL_POINTS);
-            prev_point_2 = dead_point.point;
-
-            if dead_point.went_outside {
-                continue;
-            }
-
-            dead_point.went_outside = is_outside_game_area(dead_point.point);
-            if !dead_point.went_outside then
-                found_any_enabled = true;
-        }
-
-        if !found_any_enabled {
-            for #v2 < j : 0..segment.dead_points.count-1 {
-                print("\n%=%",i,segment.dead_points[j].went_outside);
-                remove_dead_snake_point(i,j);
-            }
-            remove_dead_snake_segment(i);
-            print("\nRemoved segment: %",i);
-        }
-    }
-
-    //print("\nSegments count: %",snake.dead_segments.count);
-    //Wrap around
-    padding := 0.0;
-    if is_outside_game_area(snake.head) {
-        dissappear_point := snake.head;
-        //snake.head.x = fmod_cycling(snake.head.x + BASE_WIDTH+padding, BASE_WIDTH+padding);
-        //snake.head.y = fmod_cycling(snake.head.y + BASE_HEIGHT+padding, BASE_HEIGHT+padding);
-
-        if false {
-            //Create new segment just when the head warped
-            create_new_dead_segment(dissappear_point,
-                 .{ifx dissappear_point.x < -padding then -1.0 else (ifx dissappear_point.x > BASE_WIDTH +padding then 1.0 else 0.0),
-                   ifx dissappear_point.y < -padding then -1.0 else (ifx dissappear_point.y > BASE_HEIGHT +padding then 1.0 else 0.0)});
-
-            //Delete the tail one by one and create a ghost tail then regenerate the tail on the other side
-            for #v2 < 0..snake.tail.count-1 {
-                //warp_point := snake.tail[it] + warp_offset + normalize(warp_offset) * DISTANCE_BETWEEN_TAIL_POINTS*2;
-                add_dead_point_to_last_segment(snake.tail[it],it);
-                remove_from_tail(it);
-                add_to_tail(snake.head-direction*cast(float)(it+1));
-            }
-        }
-    }
-
     //All collisions wraps the snake tail and head back to the original viewport
     //@@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
@@ -384,24 +329,6 @@ process_logic :: () {
         }
     }
 
-    //Collision with the head and the dead points
-
-    for i : 0..snake.dead_segments.count-1 {
-        for j : 0..snake.dead_segments[i].dead_points.count-1 {
-            scale : float = (cast(float)j / (snake.tail.count));
-
-            //@@IMPORTANT: This causes a bug when a ghost tail and the real tail matches and re enters the playfield, killing the snake.
-            //Find a way to disable the parts that already left the playfield
-            if check_collision(snake.head,HEAD_SIZE,snake.dead_segments[i].dead_points[j].point,HEAD_SIZE*scale) &&
-                !snake.dead_segments[i].dead_points[j].went_outside {
-                print("\nCollided with dead segment: %",i);
-                print("\nHead at: %, other at: %",snake.head,snake.dead_segments[i].dead_points[j].point);
-                kill();
-                break i;
-            }
-        }
-    }
-
     //Collision of the head with pickups
     for #v2 < pickup,i : pickups {
         if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(pickup.point),pickup.radius) {
@@ -412,6 +339,7 @@ process_logic :: () {
             create_new_pickup_at_random(.APPLE,0.5);
         }
     }
+
     //Collision of the tail with pickups
     for tail_point,i : snake.tail {
         for *pickup,j : pickups {
@@ -421,19 +349,6 @@ process_logic :: () {
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
                 pickup.point = constraint_distance(cycle_point(pickup.point),cycle_point(tail_point),radius);
-        }
-    }
-    //Collision of the dead parts with pickups
-    for segment : snake.dead_segments {
-        for dead_point : segment.dead_points {
-            for *pickup,j : pickups {
-                dist := distance(pickup.point,dead_point.point);
-                scale : float = 1.0 - ((cast(float)dead_point.index_equivalent) / (snake.tail.count));
-
-                radius := pickup.radius + HEAD_SIZE * scale;
-                if dist < radius then
-                    pickup.point = constraint_distance(pickup.point,dead_point.point,radius);
-            }
         }
     }
 }
@@ -447,35 +362,6 @@ destroy_tail :: () {
     for #v2 < 0..snake.tail.count-1 {
         remove_from_tail(it);
     }
-}
-
-destroy_all_dead_segments :: () {
-    for #v2 < i : 0..snake.dead_segments.count-1 {
-        for #v2 < j : 0..snake.dead_segments[i].dead_points.count-1 {
-            remove_dead_snake_point(i,j);
-        }
-        remove_dead_snake_segment(i);
-    }
-}
-
-remove_dead_snake_segment :: (index : int) {
-    array_free(snake.dead_segments[index].dead_points);
-    array_ordered_remove_by_index(*snake.dead_segments,index);
-}
-
-remove_dead_snake_point :: (segment_index : int, point_index : int) {
-    array_ordered_remove_by_index(*snake.dead_segments[segment_index].dead_points,point_index);
-}
-
-create_new_dead_segment :: (warp_point : Vector2, dir : Vector2) {
-    array_add(*snake.dead_segments,.{out_point = warp_point, out_dir = dir});
-}
-
-add_dead_point_to_last_segment ::(pos : Vector2, index : int) {
-    array_add(*snake.dead_segments[snake.dead_segments.count-1].dead_points,DeadPoint.{
-            point = pos,
-            index_equivalent = index
-        });
 }
 
 add_to_tail :: () {
@@ -529,11 +415,6 @@ render_stuff :: () {
         glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
         draw_circle(head_pos,HEAD_SIZE,32);
 
-        //Ghost heads
-        for segment : snake.dead_segments {
-            draw_circle(segment.out_point,HEAD_SIZE,32);
-        }
-
         //Tail
 
         //Alive parts
@@ -574,38 +455,8 @@ render_stuff :: () {
     if IS_DEBUGGING_GRAPHICS then
         glColor4f(0.3, 1, 0.306,1.0); //Debug color
 
-    for i : 0..snake.dead_segments.count-1 {
-        glBegin(GL_TRIANGLE_STRIP);
-        out_point := snake.dead_segments[i].out_point;
-        for j : 0..snake.dead_segments[i].dead_points.count-1 {
-
-            dist := distance(snake.dead_segments[i].dead_points[j].point, out_point);
-
-            if dist > 16.0{
-                glEnd();
-                glBegin(GL_TRIANGLE_STRIP);
-                continue;
-            }
-
-            scale : float = 1.0 - (cast(float)snake.dead_segments[i].dead_points[j].index_equivalent / (snake.tail.count));
-            dir := normalize(out_point - snake.dead_segments[i].dead_points[j].point);
-
-            center := snake.dead_segments[i].dead_points[j].point;
-
-            p0 := to_clip_space(center + rotate(dir,TAU/4.0)*scale*HEAD_SIZE);
-            p1 := to_clip_space(center + rotate(dir,-TAU/4.0)*scale*HEAD_SIZE);
-
-            glVertex2f(p0.x,p0.y);
-            glVertex2f(p1.x,p1.y);
-            out_point = snake.dead_segments[i].dead_points[j].point;
-        }
-
-        glEnd();
-
-    }
-
     for pickup : pickups {
-        draw_circle(pickup.point,pickup.radius,16);
+        draw_circle(cycle_point(pickup.point),pickup.radius,4);
     }
 
     //Debug drawing...
@@ -620,17 +471,6 @@ render_stuff :: () {
                 draw_wired_circle(center,scale*HEAD_SIZE,16);
                 glEnd();
             }
-            for i : 0..snake.dead_segments.count-1 {
-                for j : 0..snake.dead_segments[i].dead_points.count-1 {
-                    if snake.dead_segments[i].dead_points[j].went_outside then
-                        continue;
-                    glBegin(GL_LINES);
-                    scale : float = (cast(float)j / (snake.tail.count));
-                    center := snake.dead_segments[i].dead_points[j].point;
-                    draw_wired_circle(center,scale*HEAD_SIZE,16);
-                    glEnd();
-                }
-            }
         }
     }
 
@@ -641,12 +481,6 @@ render_stuff :: () {
         //Body
         for point : snake.tail {
             draw_circle(cycle_point(point),0.1);
-        }
-        //Dead parts
-        for segment : snake.dead_segments {
-            for dead_point : segment.dead_points {
-                draw_circle(dead_point.point,0.1);
-            }
         }
     }
 }
@@ -726,17 +560,6 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
 Snake :: struct {
     head : Vector2;
     tail : [..]Vector2;
-    dead_segments : [..]DeadSegment;
-}
-DeadSegment :: struct {
-    dead_points : [..]DeadPoint;
-    out_point : Vector2;
-    out_dir : Vector2;
-}
-DeadPoint :: struct {
-    point : Vector2;
-    index_equivalent : int;
-    went_outside : bool;
 }
 KeyState :: struct {
     was_just_pressed : bool;
