@@ -609,7 +609,7 @@ render_stuff :: () {
 
     //Debug drawing...
     //Circle
-    if false {
+    if true {
         if IS_DEBUGGING_GRAPHICS {
             glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
             for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
@@ -693,7 +693,7 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
     glVertex2f(center.x,center.y);
     for 0..count {
         angle_0 := (it / cast(float)count) * TAU;
-        p0 := to_clip_space(pos + rotate(Vector2.{0,1},angle_0)*radius);
+        p0 := to_clip_space(pos + .{cos(angle_0),sin(angle_0)}*radius);
         glVertex2f(p0.x,p0.y);
     }
     glEnd();
@@ -706,8 +706,10 @@ draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
     for 1..count {
         angle_0 := (it / cast(float)count) * TAU;
         angle_1 := (it / cast(float)count) * TAU;
-        p0 := to_clip_space(pos + rotate(Vector2.{0,1},angle_0)*radius);
-        p1 := to_clip_space(pos + rotate(Vector2.{0,1},angle_1)*radius);
+
+        p0 := to_clip_space(pos + .{cos(angle_0),sin(angle_0)}*radius);
+        p1 := to_clip_space(pos + .{cos(angle_1),sin(angle_1)}*radius);
+
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
     }
