@@ -370,14 +370,15 @@ process_logic :: () {
         }
     }
 
+    //All collisions wraps the snake tail and head back to the original viewport
     //@@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
 
     for i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
-        if check_collision(snake.head,HEAD_SIZE,snake.tail[i],HEAD_SIZE*scale) {
+        if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(snake.tail[i]),HEAD_SIZE*scale) {
             print("\nCollided with tail: %",i);
-            print("\nHead at: %, other at: %",snake.head,snake.tail[i]);
+            print("\nHead at: %, other at: %",cycle_point(snake.head),snake.tail[i]);
             kill();
             break;
         }
@@ -403,7 +404,7 @@ process_logic :: () {
 
     //Collision of the head with pickups
     for #v2 < pickup,i : pickups {
-        if check_collision(snake.head,HEAD_SIZE,pickup.point,pickup.radius) {
+        if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(pickup.point),pickup.radius) {
             for 0..5 {
                 add_to_tail();
             }
@@ -414,12 +415,12 @@ process_logic :: () {
     //Collision of the tail with pickups
     for tail_point,i : snake.tail {
         for *pickup,j : pickups {
-            dist := distance(pickup.point,tail_point);
+            dist := distance(cycle_point(pickup.point),cycle_point(tail_point));
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
-                pickup.point = constraint_distance(pickup.point,tail_point,radius);
+                pickup.point = constraint_distance(cycle_point(pickup.point),cycle_point(tail_point),radius);
         }
     }
     //Collision of the dead parts with pickups
@@ -615,7 +616,7 @@ render_stuff :: () {
             for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
                 glBegin(GL_LINES);
                 scale : float = 1.0 - (cast(float)it / (snake.tail.count));
-                center := snake.tail[it];
+                center := cycle_point(snake.tail[it]);
                 draw_wired_circle(center,scale*HEAD_SIZE,16);
                 glEnd();
             }
@@ -639,7 +640,7 @@ render_stuff :: () {
 
         //Body
         for point : snake.tail {
-            draw_circle(point,0.1);
+            draw_circle(cycle_point(point),0.1);
         }
         //Dead parts
         for segment : snake.dead_segments {
