@@ -3,15 +3,15 @@ BASE_HEIGHT   :: 32;
 
 FPS_TARGET :: 240;
 
-MULTIPLIER :: 16;
+MULTIPLIER :: 1080/48;
 
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
 
-TAIL_POINTS_SKIPPED :: 10;
-DISTANCE_BETWEEN_TAIL_POINTS :: 0.25;
+TAIL_POINTS_SKIPPED :: 25;
+DISTANCE_BETWEEN_TAIL_POINTS :: 0.2;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 0.5;
@@ -224,7 +224,9 @@ init_game :: () {
     snake.head = CENTER_POINT;
     create_base_tail();
     is_alive = true;
-    create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
+    for 0..32 {
+        create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
+    }
 }
 
 kill :: () {
@@ -319,7 +321,7 @@ process_logic :: () {
     //@@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
 
-    for i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
+    for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
         if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(snake.tail[i]),HEAD_SIZE*scale) {
             print("\nCollided with tail: %",i);
@@ -341,14 +343,14 @@ process_logic :: () {
     }
 
     //Collision of the tail with pickups
-    for tail_point,i : snake.tail {
+    for *tail_point,i : snake.tail {
         for *pickup,j : pickups {
             dist := distance(cycle_point(pickup.point),cycle_point(tail_point));
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
-                pickup.point = constraint_distance(cycle_point(pickup.point),cycle_point(tail_point),radius);
+                <<tail_point = constraint_distance(cycle_point(tail_point),cycle_point(pickup.point),radius);
         }
     }
 }
@@ -461,8 +463,12 @@ render_stuff :: () {
 
     //Debug drawing...
     //Circle
+
     if true {
         if IS_DEBUGGING_GRAPHICS {
+            glBegin(GL_LINES);
+            draw_wired_circle(cycle_point(snake.head),HEAD_SIZE,16);
+            glEnd();
             glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
             for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
                 glBegin(GL_LINES);
@@ -536,11 +542,9 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
 
 draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
     px := to_clip_space(pos + Vector2.{0,1}*radius);
-    glVertex2f(px.x,px.y);
-
     for 1..count {
         angle_0 := (it / cast(float)count) * TAU;
-        angle_1 := (it / cast(float)count) * TAU;
+        angle_1 := ((it-1) / cast(float)count) * TAU;
 
         p0 := to_clip_space(pos + .{cos(angle_0),sin(angle_0)}*radius);
         p1 := to_clip_space(pos + .{cos(angle_1),sin(angle_1)}*radius);
