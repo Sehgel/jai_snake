@@ -350,7 +350,7 @@ process_logic :: () {
 
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
-                <<tail_point = constraint_distance(cycle_point(tail_point),cycle_point(pickup.point),radius);
+                pickup.point = constraint_distance(cycle_point(pickup.point),cycle_point(tail_point),radius);
         }
     }
 }
