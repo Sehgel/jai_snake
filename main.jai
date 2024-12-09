@@ -10,7 +10,8 @@ WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
 
-TAIL_POINTS_SKIPPED :: 25;
+TAIL_POINTS_SKIPPED :: 10;
+TAIL_ADD_DELAY :: 0.1;
 DISTANCE_BETWEEN_TAIL_POINTS :: 0.2;
 
 PIXEL_SIZE :: 8;
@@ -45,9 +46,11 @@ dt : float;
 time_scale : float = 1.0;
 frame_counter : u64;
 is_alive : bool = false;
-
 test_point : Vector2;
 test_circle : Vector2;
+
+tail_adding_counter : float;
+tail_points_to_add : int;
 
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
@@ -224,7 +227,7 @@ init_game :: () {
     snake.head = CENTER_POINT;
     create_base_tail();
     is_alive = true;
-    for 0..32 {
+    for 0..10 {
         create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
     }
 }
@@ -318,7 +321,19 @@ process_logic :: () {
     }
 
     //All collisions wraps the snake tail and head back to the original viewport
-    //@@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
+    //Collision of the head with the skipped tail point
+    /*for i : 4..TAIL_POINTS_SKIPPED {
+        tail_point := snake.tail[i];
+        dist := distance(cycle_point(snake.head),cycle_point(tail_point));
+        scale : float = 1.0 - (cast(float)i / (snake.tail.count));
+
+        radius := HEAD_SIZE + HEAD_SIZE * scale;
+        if dist < radius then
+            snake.head = constraint_distance(cycle_point(snake.head),cycle_point(tail_point),radius);
+    }*/
+
+
+    //@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
 
     for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
@@ -334,8 +349,8 @@ process_logic :: () {
     //Collision of the head with pickups
     for #v2 < pickup,i : pickups {
         if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(pickup.point),pickup.radius) {
-            for 0..5 {
-                add_to_tail();
+            for 0..4 {
+                add_to_tail_deferred();
             }
             destroy_pickup(i);
             create_new_pickup_at_random(.APPLE,0.5);
@@ -351,6 +366,18 @@ process_logic :: () {
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
                 pickup.point = constraint_distance(cycle_point(pickup.point),cycle_point(tail_point),radius);
+        }
+    }
+
+    //Consume queued tail grows
+    if tail_points_to_add > 0 {
+        if tail_adding_counter <= 0.0 {
+            add_to_tail();
+            print("\nAdded one point to tail, left: %", tail_points_to_add);
+            tail_adding_counter = TAIL_ADD_DELAY;
+            tail_points_to_add -= 1;
+        }else {
+            tail_adding_counter -= dt;
         }
     }
 }
@@ -370,6 +397,10 @@ add_to_tail :: () {
     dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else direction;
 
     array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
+}
+
+add_to_tail_deferred :: () {
+    tail_points_to_add += 1;
 }
 
 add_to_tail :: (pos : Vector2) {
@@ -409,7 +440,7 @@ render_stuff :: () {
         width := WINDOW_WIDTH;
         height := WINDOW_HEIGHT;
         //Head
-        padding := 8.0;
+        padding := 10.0;
 
         head_pos := snake.head;
         head_pos = cycle_point(head_pos,padding);
@@ -418,8 +449,6 @@ render_stuff :: () {
         draw_circle(head_pos,HEAD_SIZE,32);
 
         //Tail
-
-        //Alive parts
         glColor4f(0.086, 0.322, 0.306,1.0);
 
         glBegin(GL_TRIANGLE_STRIP);
@@ -440,7 +469,7 @@ render_stuff :: () {
                 continue;
             }
 
-            scale : float = 1.0 - (cast(float)it / (snake.tail.count));
+            scale : float = 1.0 - (cast(float)it / (snake.tail.count+4));
             dir := normalize(tail_cycled - center_cycled);
 
             p0 := to_clip_space(center_cycled + rotate(dir, TAU/4)*scale*HEAD_SIZE);
@@ -453,7 +482,6 @@ render_stuff :: () {
 
     }
 
-    //Dead parts
     if IS_DEBUGGING_GRAPHICS then
         glColor4f(0.3, 1, 0.306,1.0); //Debug color
 
