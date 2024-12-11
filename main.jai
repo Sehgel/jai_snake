@@ -373,7 +373,6 @@ process_logic :: () {
     if tail_points_to_add > 0 {
         if tail_adding_counter <= 0.0 {
             add_to_tail();
-            print("\nAdded one point to tail, left: %", tail_points_to_add);
             tail_adding_counter = TAIL_ADD_DELAY;
             tail_points_to_add -= 1;
         }else {
@@ -469,7 +468,7 @@ render_stuff :: () {
                 continue;
             }
 
-            scale : float = 1.0 - (cast(float)it / (snake.tail.count+4));
+            scale : float = 1.0 - (cast(float)(it) / (snake.tail.count));
             dir := normalize(tail_cycled - center_cycled);
 
             p0 := to_clip_space(center_cycled + rotate(dir, TAU/4)*scale*HEAD_SIZE);
@@ -478,6 +477,14 @@ render_stuff :: () {
             glVertex2f(p0.x,p0.y);
             glVertex2f(p1.x,p1.y);
         }
+        //Draw last tip of the tail:
+        last_point := cycle_point(snake.tail[snake.tail.count-1],padding);
+        dir := normalize(last_point - previous_point);
+        p0 := to_clip_space(last_point); //to_clip_space(last_point + rotate(dir, TAU/4)*scale*HEAD_SIZE);
+
+        glVertex2f(p0.x,p0.y);
+        glVertex2f(p0.x,p0.y);
+
         glEnd();
 
     }
@@ -514,7 +521,7 @@ render_stuff :: () {
 
         //Body
         for point : snake.tail {
-            draw_circle(cycle_point(point),0.1);
+            draw_circle(cycle_point(point),0.05);
         }
     }
 }
