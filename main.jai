@@ -36,7 +36,6 @@ key_pause : KeyState;
 snake : Snake;
 pickups : [..]PickUp;
 
-viewports : [..]Vector2;
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 inputv2 := Vector2.{0,0};
@@ -222,9 +221,11 @@ main :: () {
 }
 
 init_game :: () {
-    array_add(*viewports,.{32,0});
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
+
+    array_reserve(*snake.tail,500);//Should I be doing this? Not sure.
+
     create_base_tail();
     is_alive = true;
     for 0..10 {
@@ -236,6 +237,10 @@ kill :: () {
     is_alive = false;
     time_scale = 0;
     print("\n[%]You lost!",frame_counter);
+}
+
+cut_tail_at :: (index : int) {
+    snake.tail.count = index;
 }
 
 restart_game :: () {
@@ -320,7 +325,9 @@ process_logic :: () {
         prev_point = snake.tail[it];
     }
 
-    //All collisions wraps the snake tail and head back to the original viewport
+    //@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
+
+
     //Collision of the head with the skipped tail point
     /*for i : 4..TAIL_POINTS_SKIPPED {
         tail_point := snake.tail[i];
@@ -339,9 +346,10 @@ process_logic :: () {
     for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
         if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(snake.tail[i]),HEAD_SIZE*scale) {
-            print("\nCollided with tail: %",i);
+            print("\nCollided with tail: % of %",i,snake.tail.count);
             print("\nHead at: %, other at: %",cycle_point(snake.head),snake.tail[i]);
-            kill();
+            //kill();
+            cut_tail_at(i);
             break;
         }
     }
@@ -434,66 +442,63 @@ render_stuff :: () {
 
     glColor4f(0.086, 0.322, 0.306,1.0);
 
-    for viewport : viewports {
+    width := WINDOW_WIDTH;
+    height := WINDOW_HEIGHT;
+    //Head
+    padding := 10.0;
 
-        width := WINDOW_WIDTH;
-        height := WINDOW_HEIGHT;
-        //Head
-        padding := 10.0;
+    head_pos := snake.head;
+    head_pos = cycle_point(head_pos,padding);
 
-        head_pos := snake.head;
-        head_pos = cycle_point(head_pos,padding);
+    glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
+    draw_circle(head_pos,HEAD_SIZE,32);
 
-        glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
-        draw_circle(head_pos,HEAD_SIZE,32);
+    //Tail
+    glColor4f(0.086, 0.322, 0.306,1.0);
 
-        //Tail
-        glColor4f(0.086, 0.322, 0.306,1.0);
+    glBegin(GL_TRIANGLE_STRIP);
+    previous_point := snake.head;
+    for 0..snake.tail.count-1 {
+        center_cycled := previous_point;
+        center_cycled = cycle_point(center_cycled,padding);
 
-        glBegin(GL_TRIANGLE_STRIP);
-        previous_point := snake.head;
-        for 0..snake.tail.count-1 {
-            center_cycled := previous_point;
-            center_cycled = cycle_point(center_cycled,padding);
+        tail_cycled := snake.tail[it];
+        tail_cycled = cycle_point(tail_cycled,padding);
 
-            tail_cycled := snake.tail[it];
-            tail_cycled = cycle_point(tail_cycled,padding);
+        dist := distance(tail_cycled, center_cycled);
 
-            dist := distance(tail_cycled, center_cycled);
-
-            previous_point = tail_cycled;
-            if dist > 16.0 {
-                glEnd();
-                glBegin(GL_TRIANGLE_STRIP);
-                continue;
-            }
-
-            scale : float = 1.0 - (cast(float)(it) / (snake.tail.count));
-            dir := normalize(tail_cycled - center_cycled);
-
-            p0 := to_clip_space(center_cycled + rotate(dir, TAU/4)*scale*HEAD_SIZE);
-            p1 := to_clip_space(center_cycled + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
-
-            glVertex2f(p0.x,p0.y);
-            glVertex2f(p1.x,p1.y);
+        previous_point = tail_cycled;
+        if dist > 16.0 {
+            glEnd();
+            glBegin(GL_TRIANGLE_STRIP);
+            continue;
         }
-        //Draw last tip of the tail:
-        last_point := cycle_point(snake.tail[snake.tail.count-1],padding);
-        dir := normalize(last_point - previous_point);
-        p0 := to_clip_space(last_point); //to_clip_space(last_point + rotate(dir, TAU/4)*scale*HEAD_SIZE);
+
+        scale : float = 1.0 - (cast(float)(it) / (snake.tail.count));
+        dir := normalize(tail_cycled - center_cycled);
+
+        p0 := to_clip_space(center_cycled + rotate(dir, TAU/4)*scale*HEAD_SIZE);
+        p1 := to_clip_space(center_cycled + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
 
         glVertex2f(p0.x,p0.y);
-        glVertex2f(p0.x,p0.y);
-
-        glEnd();
-
+        glVertex2f(p1.x,p1.y);
     }
+    //Draw last tip of the tail:
+    last_point := cycle_point(snake.tail[snake.tail.count-1],padding);
+    dir := normalize(last_point - previous_point);
+    p0 := to_clip_space(last_point); //to_clip_space(last_point + rotate(dir, TAU/4)*scale*HEAD_SIZE);
+
+    glVertex2f(p0.x,p0.y);
+    glVertex2f(p0.x,p0.y);
+
+    glEnd();
+
 
     if IS_DEBUGGING_GRAPHICS then
         glColor4f(0.3, 1, 0.306,1.0); //Debug color
 
     for pickup : pickups {
-        draw_circle(cycle_point(pickup.point),pickup.radius,4);
+        draw_circle(cycle_point(pickup.point),pickup.radius,6);
     }
 
     //Debug drawing...
@@ -621,4 +626,3 @@ Pickup_Type :: enum u32 {
 #import "SDL";
 #import "Random";
 Input :: #import "Input";
-Simp :: #import "Simp";
