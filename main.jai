@@ -9,13 +9,14 @@ WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
+//CENTER_POINT :: Vector2.{0,0};
 
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.1;
-DISTANCE_BETWEEN_TAIL_POINTS :: 0.2;
+DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 
 PIXEL_SIZE :: 8;
-HEAD_SIZE :: 0.5;
+HEAD_SIZE :: 12;
 
 //DEBUG
 IS_DEBUGGING_GRAPHICS := false;
@@ -39,7 +40,7 @@ pickups : [..]PickUp;
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 inputv2 := Vector2.{0,0};
-speed : float = 20;
+speed : float = 200;
 last_time : float64;
 dt : float;
 time_scale : float = 1.0;
@@ -50,6 +51,17 @@ test_circle : Vector2;
 
 tail_adding_counter : float;
 tail_points_to_add : int;
+
+
+tail_VBO : u32;
+tail_VAO : u32;
+tail_shader : GLuint;
+
+head_VAO : u32;
+head_VBO : u32;
+head_vertices : [..]float;
+
+camera_pos : Vector2;
 
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
@@ -84,12 +96,12 @@ main :: () {
     print ("GL Version = %\n", to_string(glGetString(GL_VERSION)));
 
     init_game();
+    prepare_render();
 
     // Enable MSAA
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
     glEnable(GL_MULTISAMPLE);
-
     //VSync?
     wglSwapIntervalEXT(1);
 
@@ -197,7 +209,7 @@ main :: () {
 
         process_input();
         process_logic();
-        render_stuff();
+        new_render_stuff();
         SDL_GL_SwapWindow(window);
 
         reset_temporary_storage();
@@ -224,12 +236,30 @@ init_game :: () {
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
-    array_reserve(*snake.tail,500);//Should I be doing this? Not sure.
+    //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
+    //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
+    //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
 
     create_base_tail();
     is_alive = true;
     for 0..10 {
         create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
+    }
+}
+
+update_tail_graphic :: () {
+    print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
+    prev := snake.head;
+    for 0..snake.tail.count-1 {
+        dir_to_last := normalize(prev - snake.tail[it]);
+
+        scale : float = 1.0 - (cast(float)(it) / (snake.tail.count-1));
+        p0 := prev + rotate(dir_to_last,TAU/4.0)*scale*HEAD_SIZE;
+        p1 := prev + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
+        prev = snake.tail[it];
+
+        snake.tail_graphic[it*2] = p0;
+        snake.tail_graphic[(it*2)+1] = p1;
     }
 }
 
@@ -260,7 +290,7 @@ create_base_tail :: () {
 
 process_input :: () {
     input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
-    input.y = ifx key_down then -1.0 else 0.0 + ifx key_up then 1.0 else 0.0;
+    input.y = ifx key_down then 1.0 else 0.0 + ifx key_up then -1.0 else 0.0;
 
     x_state := ifx key_left then -1 else 0.0 + ifx key_right then 1.0 else 0.0;
     y_state := ifx key_down then -1 else 0.0 + ifx key_up then 1.0 else 0.0;
@@ -317,14 +347,13 @@ process_logic :: () {
     move_dir := direction;
     move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
     snake.head += move_dir * speed * dt;
-
+    //print("\nPos: %",snake.head);
     //Move body
     prev_point := snake.head;
     for 0..snake.tail.count-1 {
         snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
         prev_point = snake.tail[it];
     }
-
     //@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
 
 
@@ -343,6 +372,7 @@ process_logic :: () {
     //@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
 
+    /*
     for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
         if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(snake.tail[i]),HEAD_SIZE*scale) {
@@ -387,6 +417,7 @@ process_logic :: () {
             tail_adding_counter -= dt;
         }
     }
+    */
 }
 
 is_outside_game_area :: (point : Vector2) -> bool {
@@ -404,6 +435,12 @@ add_to_tail :: () {
     dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else direction;
 
     array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
+
+    array_add(*snake.tail_graphic, snake.tail[snake.tail.count-1] + dir);
+    array_add(*snake.tail_graphic, snake.tail[snake.tail.count-1] + dir);
+
+    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glBufferData(GL_ARRAY_BUFFER,snake.tail_graphic.count*size_of(float),snake.tail_graphic.data,GL_DYNAMIC_DRAW);
 }
 
 add_to_tail_deferred :: () {
@@ -412,6 +449,9 @@ add_to_tail_deferred :: () {
 
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
+
+    array_add(*snake.tail_graphic, pos);
+    array_add(*snake.tail_graphic, pos);
 }
 
 remove_from_tail :: (index : int) {
@@ -430,17 +470,93 @@ destroy_pickup :: (index : int) {
     array_ordered_remove_by_index(*pickups,index);
 }
 
-render_stuff :: () {
+prepare_render :: () {
+    //Shaders
+    tail_shader = create_shader_program("shaders/tail/tail_vertex.glsl","shaders/tail/tail_fragment.glsl");
+
 
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
 
-    glClearColor(0.369, 0.69, 0.588,1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
+    //Head
+    generate_fan_circle(*head_vertices,HEAD_SIZE,32);
 
-    glColor4f(0.086, 0.322, 0.306,1.0);
+    glGenVertexArrays(1,*head_VAO);
+    glGenBuffers(1,*head_VBO);
+
+    glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+    glBufferData(GL_ARRAY_BUFFER,head_vertices.count*size_of(float),head_vertices.data,GL_STATIC_DRAW);
+
+    glBindVertexArray(head_VAO);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
+
+    //Tail:
+    //VBO
+    glGenBuffers(1,*tail_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glBufferData(GL_ARRAY_BUFFER,snake.tail_graphic.count*size_of(float),snake.tail_graphic.data,GL_DYNAMIC_DRAW);
+    //VAO
+    glGenVertexArrays(1,*tail_VAO);
+    glBindVertexArray(tail_VAO);
+    //Vertex Pointers
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
+    glEnableVertexAttribArray(0);
+
+
+}
+new_render_stuff :: () {
+
+    update_tail_graphic();
+
+    glClearColor(0.369, 0.69, 0.588,1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glUseProgram(tail_shader);
+
+    model_location      := glGetUniformLocation(tail_shader, "model");
+    view_location       := glGetUniformLocation(tail_shader, "view");
+    projection_location := glGetUniformLocation(tail_shader, "projection");
+    tint_location       := glGetUniformLocation(tail_shader, "tint");
+
+    glBindVertexArray(head_VAO);
+    //View
+    view := Matrix4_Identity;
+    view = make_translation_matrix4(.{camera_pos.x,camera_pos.y,0});
+    //Projection
+    projection := orthographic_projection_matrix(0.0,WINDOW_WIDTH,WINDOW_HEIGHT,0.0,-1.0,1.0);
+    //Model
+    head_model := translate(Matrix4_Identity,cycle_point3(snake.head));
+
+    glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *head_model);
+    glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
+    glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
+    glUniform3f(tint_location, 0.086, 0.322, 0.306);
+    glDrawArrays(GL_TRIANGLE_FAN,0,xx head_vertices.count);
+
+
+    glBindVertexArray(tail_VAO);
+
+    tail_model := Matrix4_Identity;
+    glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *tail_model);
+    glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
+    glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
+    glUniform3f(tint_location, 1.0, 0.322, 0.306);
+    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glBufferSubData(GL_ARRAY_BUFFER,0,snake.tail_graphic.count*size_of(float),snake.tail_graphic.data);
+    glDrawArrays(GL_TRIANGLE_STRIP,0,xx snake.tail_graphic.count);
+}
+/*
+render_stuff :: () {
+
+
+    glClearColor(0.369, 0.69, 0.588,1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    //glColor4f(0.086, 0.322, 0.306,1.0);
 
     width := WINDOW_WIDTH;
     height := WINDOW_HEIGHT;
@@ -483,6 +599,7 @@ render_stuff :: () {
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
     }
+
     //Draw last tip of the tail:
     last_point := cycle_point(snake.tail[snake.tail.count-1],padding);
     dir := normalize(last_point - previous_point);
@@ -492,7 +609,6 @@ render_stuff :: () {
     glVertex2f(p0.x,p0.y);
 
     glEnd();
-
 
     if IS_DEBUGGING_GRAPHICS then
         glColor4f(0.3, 1, 0.306,1.0); //Debug color
@@ -530,8 +646,13 @@ render_stuff :: () {
         }
     }
 }
-
-cycle_point :: (point : Vector2, padding : float = 0.0) -> Vector2 {
+*/
+cycle_point3 :: (point : Vector2, padding : float = 0.0) -> Vector3 {
+    return .{fmod_cycling(point.x + WINDOW_WIDTH ,  WINDOW_WIDTH),
+             fmod_cycling(point.y + WINDOW_HEIGHT,  WINDOW_HEIGHT),
+             0};
+}
+cycle_point2 :: (point : Vector2, padding : float = 0.0) -> Vector2 {
     return .{fmod_cycling(point.x + BASE_WIDTH ,  BASE_WIDTH),
              fmod_cycling(point.y + BASE_HEIGHT,  BASE_HEIGHT)};
 }
@@ -545,14 +666,22 @@ constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> 
     return anchor + (normalize(point-anchor) * distance);
 }
 
-to_clip_space :: (pos : Vector2) -> Vector2 {
+/*to_clip_space :: (pos : Vector2) -> Vector2 {
     return Vector2.{ ((pos.x/BASE_WIDTH) * 2) - 1, ((pos.y/BASE_HEIGHT) * 2) - 1};
+}*/
+generate_fan_circle :: (vertices : *[..]float, radius : float = 1.0, count : int = 8) {
+    array_add(vertices,0);
+    array_add(vertices,0);
+    for 0..count {
+        angle_0 := (it / cast(float)count) * TAU;
+        array_add(vertices,cos(angle_0) * radius);
+        array_add(vertices,sin(angle_0) * radius);
+    }
 }
-
 to_grid :: (position : Vector2) -> Vector2 {
     return .{floor(position.x),floor(position.y)};
 }
-
+/*
 draw_quad :: (pos : Vector2, size : float) {
     p0 := to_clip_space(pos + Vector2.{-size , size});
     p1 := to_clip_space(pos + Vector2.{-size ,-size});
@@ -567,7 +696,9 @@ draw_quad :: (pos : Vector2, size : float) {
     glVertex2f(p2.x,p2.y);
     glVertex2f(p3.x,p3.y);
 }
+*/
 
+/*
 draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
     glBegin(GL_TRIANGLE_FAN);
     center := to_clip_space(pos);
@@ -578,8 +709,8 @@ draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
         glVertex2f(p0.x,p0.y);
     }
     glEnd();
-}
-
+}*/
+/*
 draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
     px := to_clip_space(pos + Vector2.{0,1}*radius);
     for 1..count {
@@ -592,18 +723,19 @@ draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
         glVertex2f(p0.x,p0.y);
         glVertex2f(p1.x,p1.y);
     }
-}
-
+}*/
+/*
 draw_line :: (p0 : Vector2, p1 : Vector2) {
     clip_point := to_clip_space(p0);
     clip_point2 := to_clip_space(p1);
     glVertex2f(clip_point.x,clip_point.y);
     glVertex2f(clip_point2.x,clip_point2.y);
-}
+}*/
 
 Snake :: struct {
     head : Vector2;
     tail : [..]Vector2;
+    tail_graphic : [..]Vector2;
 }
 KeyState :: struct {
     was_just_pressed : bool;
@@ -626,3 +758,4 @@ Pickup_Type :: enum u32 {
 #import "SDL";
 #import "Random";
 Input :: #import "Input";
+#load "shader_program.jai";
