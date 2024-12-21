@@ -1,4 +1,4 @@
-BASE_WIDTH    :: 32;
+    BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
 
 FPS_TARGET :: 240;
@@ -8,7 +8,7 @@ MULTIPLIER :: 1080/48;
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
-CENTER_POINT :: Vector2.{BASE_WIDTH/2,BASE_HEIGHT/2};
+CENTER_POINT :: Vector2.{WINDOW_WIDTH/2,WINDOW_HEIGHT/2};
 //CENTER_POINT :: Vector2.{0,0};
 
 TAIL_POINTS_SKIPPED :: 10;
@@ -40,7 +40,7 @@ pickups : [..]PickUp;
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 inputv2 := Vector2.{0,0};
-speed : float = 200;
+speed : float = 300;
 last_time : float64;
 dt : float;
 time_scale : float = 1.0;
@@ -248,7 +248,6 @@ init_game :: () {
 }
 
 update_tail_graphic :: () {
-    print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
     prev := snake.head;
     for 0..snake.tail.count-1 {
         dir_to_last := normalize(prev - snake.tail[it]);
@@ -258,8 +257,8 @@ update_tail_graphic :: () {
         p1 := prev + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
         prev = snake.tail[it];
 
-        snake.tail_graphic[it*2] = p0;
-        snake.tail_graphic[(it*2)+1] = p1;
+        snake.tail_graphic[it*2] = cycle_point2(p0);
+        snake.tail_graphic[(it*2)+1] = cycle_point2(p1);
     }
 }
 
@@ -440,18 +439,16 @@ add_to_tail :: () {
     array_add(*snake.tail_graphic, snake.tail[snake.tail.count-1] + dir);
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,snake.tail_graphic.count*size_of(float),snake.tail_graphic.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,2*snake.tail_graphic.count*size_of(float),snake.tail_graphic.data,GL_DYNAMIC_DRAW);
 }
-
-add_to_tail_deferred :: () {
-    tail_points_to_add += 1;
-}
-
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
 
     array_add(*snake.tail_graphic, pos);
     array_add(*snake.tail_graphic, pos);
+}
+add_to_tail_deferred :: () {
+    tail_points_to_add += 1;
 }
 
 remove_from_tail :: (index : int) {
@@ -480,7 +477,9 @@ prepare_render :: () {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
 
-    //Head
+    //***********************************
+    //***************Head****************
+    //***********************************
     generate_fan_circle(*head_vertices,HEAD_SIZE,32);
 
     glGenVertexArrays(1,*head_VAO);
@@ -494,11 +493,15 @@ prepare_render :: () {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
 
-    //Tail:
+    //**********************************
+    //***************Tail***************
+    //**********************************
+
     //VBO
     glGenBuffers(1,*tail_VBO);
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,snake.tail_graphic.count*size_of(float),snake.tail_graphic.data,GL_DYNAMIC_DRAW);
+    print("\ncount: %",snake.tail_graphic.count);
+    glBufferData(GL_ARRAY_BUFFER,2*snake.tail_graphic.count*size_of(float) + 50,snake.tail_graphic.data,GL_DYNAMIC_DRAW);
     //VAO
     glGenVertexArrays(1,*tail_VAO);
     glBindVertexArray(tail_VAO);
@@ -545,9 +548,14 @@ new_render_stuff :: () {
     glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
     glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
     glUniform3f(tint_location, 1.0, 0.322, 0.306);
-    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferSubData(GL_ARRAY_BUFFER,0,snake.tail_graphic.count*size_of(float),snake.tail_graphic.data);
+    //glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glBufferSubData(GL_ARRAY_BUFFER,0,2*snake.tail_graphic.count*size_of(float),snake.tail_graphic.data);
     glDrawArrays(GL_TRIANGLE_STRIP,0,xx snake.tail_graphic.count);
+
+
+    err := glGetError();
+    if err != GL_NO_ERROR then
+        print("\nOpenGL Error: 0x0%",formatInt(err,16));
 }
 /*
 render_stuff :: () {
@@ -653,8 +661,8 @@ cycle_point3 :: (point : Vector2, padding : float = 0.0) -> Vector3 {
              0};
 }
 cycle_point2 :: (point : Vector2, padding : float = 0.0) -> Vector2 {
-    return .{fmod_cycling(point.x + BASE_WIDTH ,  BASE_WIDTH),
-             fmod_cycling(point.y + BASE_HEIGHT,  BASE_HEIGHT)};
+    return .{fmod_cycling(point.x + WINDOW_WIDTH ,  WINDOW_WIDTH),
+             fmod_cycling(point.y + WINDOW_HEIGHT,  WINDOW_HEIGHT)};
 }
 
 check_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -> bool {
