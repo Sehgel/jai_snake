@@ -67,6 +67,8 @@ head_texture : u32;
 head_vertices : [..]float;
 head_rotation : Quaternion;
 
+apple_texture : u32;
+
 sprite_quad_vertices := float.[
     -0.5,-0.5,0.0,0.0,
      0.5,-0.5,1.0,0.0,
@@ -260,7 +262,7 @@ init_game :: () {
     create_base_tail();
     is_alive = true;
     for 0..10 {
-        create_new_pickup_at_random(Pickup_Type.APPLE,0.5);
+        create_new_pickup_at_random(Pickup_Type.APPLE,0.5*HEAD_SIZE);
     }
 
     //array_add(*graphics.tail_cuts,50);
@@ -304,6 +306,7 @@ kill :: () {
 
 cut_tail_at :: (index : int) {
     snake.tail.count = index;
+    graphics.tail.count = index*2;
 }
 
 restart_game :: () {
@@ -322,8 +325,11 @@ create_base_tail :: () {
 }
 
 process_input :: () {
-    input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
-    input.y = ifx key_down then 1.0 else 0.0 + ifx key_up then -1.0 else 0.0;
+
+    if is_alive {
+        input.x = ifx key_left then -1.0 else 0.0 + ifx key_right then 1.0 else 0.0;
+        input.y = ifx key_down then 1.0 else 0.0 + ifx key_up then -1.0 else 0.0;
+    }
 
     x_state := ifx key_left then -1 else 0.0 + ifx key_right then 1.0 else 0.0;
     y_state := ifx key_down then -1 else 0.0 + ifx key_up then 1.0 else 0.0;
@@ -405,38 +411,38 @@ process_logic :: () {
     //@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
 
-    /*
+
     for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
-        if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(snake.tail[i]),HEAD_SIZE*scale) {
+        if check_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(snake.tail[i]),HEAD_SIZE*scale) {
             print("\nCollided with tail: % of %",i,snake.tail.count);
-            print("\nHead at: %, other at: %",cycle_point(snake.head),snake.tail[i]);
-            //kill();
-            cut_tail_at(i);
+            print("\nHead at: %, other at: %",cycle_point2(snake.head),snake.tail[i]);
+            kill();
+            //cut_tail_at(i);
             break;
         }
     }
 
     //Collision of the head with pickups
     for #v2 < pickup,i : pickups {
-        if check_collision(cycle_point(snake.head),HEAD_SIZE,cycle_point(pickup.point),pickup.radius) {
+        if check_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(pickup.point),pickup.radius) {
             for 0..4 {
                 add_to_tail_deferred();
             }
             destroy_pickup(i);
-            create_new_pickup_at_random(.APPLE,0.5);
+            create_new_pickup_at_random(.APPLE,0.5*HEAD_SIZE);
         }
     }
 
     //Collision of the tail with pickups
     for *tail_point,i : snake.tail {
         for *pickup,j : pickups {
-            dist := distance(cycle_point(pickup.point),cycle_point(tail_point));
+            dist := distance(cycle_point2(pickup.point),cycle_point2(tail_point));
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
-                pickup.point = constraint_distance(cycle_point(pickup.point),cycle_point(tail_point),radius);
+                pickup.point = constraint_distance(cycle_point2(pickup.point),cycle_point2(tail_point),radius);
         }
     }
 
@@ -450,7 +456,7 @@ process_logic :: () {
             tail_adding_counter -= dt;
         }
     }
-    */
+
 }
 
 is_outside_game_area :: (point : Vector2) -> bool {
@@ -462,6 +468,7 @@ destroy_tail :: () {
     for #v2 < 0..snake.tail.count-1 {
         remove_from_tail(it);
     }
+
 }
 
 add_to_tail :: () {
@@ -487,6 +494,9 @@ add_to_tail_deferred :: () {
 
 remove_from_tail :: (index : int) {
     array_ordered_remove_by_index(*snake.tail,index);
+
+    array_ordered_remove_by_index(*graphics.tail,(index*2)+1);
+    array_ordered_remove_by_index(*graphics.tail,index*2);
 }
 
 create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
@@ -494,7 +504,7 @@ create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
 }
 
 create_new_pickup_at_random :: (type : Pickup_Type, radius : float) {
-    array_add(*pickups,.{.{random_get_within_range(0,BASE_WIDTH),random_get_within_range(0,BASE_HEIGHT)},radius,type});
+    array_add(*pickups,.{.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)},radius,type});
 }
 
 destroy_pickup :: (index : int) {
@@ -545,8 +555,8 @@ prepare_render :: () {
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
         width       : s32;
         height      : s32;
@@ -561,7 +571,29 @@ prepare_render :: () {
         }
         stbi_image_free(data);
     }
+    //Apple TEXTURE
+    {
+        glGenTextures(1,*apple_texture);
+        glBindTexture(GL_TEXTURE_2D,apple_texture);
 
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        width       : s32;
+        height      : s32;
+        nr_channels : s32;
+
+        data := stbi_load("sprites/apple.png",*width,*height,*nr_channels,4);
+        if data {
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        } else {
+            print("\nFailed to load texture: apple.png");
+        }
+        stbi_image_free(data);
+    }
 
     //**********************************
     //***************Tail***************
@@ -600,13 +632,21 @@ prepare_render :: () {
     glGenBuffers(1,*head_EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, head_EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sprite_indices.count*size_of(u32),*sprite_indices,GL_STATIC_DRAW);
-
-
     //glUniform1i(glGetUniformLocation(tail_shader, "text"), 0);
-}
-//*****END PREPARE RENDER*****
 
+
+    //***********************************
+    //***************APPLE****************
+    //***********************************
+
+//*****END PREPARE RENDER*****
+}
 new_render_stuff :: () {
+
+    error := glGetError();
+    if error != GL_NO_ERROR then
+        print("\nOpenGL Error: 0x0%",formatInt(error,16));
+
     padding := 10.0;
     glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
 
@@ -617,19 +657,42 @@ new_render_stuff :: () {
 
     glUseProgram(tail_shader);
 
-    //****************
-    //Drawing Tail
-    //****************
+    model_location      := glGetUniformLocation(tail_shader, "model");
+    view_location       := glGetUniformLocation(tail_shader, "view");
+    projection_location := glGetUniformLocation(tail_shader, "projection");
+    tint_location       := glGetUniformLocation(tail_shader, "tint");
+
     //View
     view := Matrix4_Identity;
     view = make_translation_matrix4(.{camera_pos.x,camera_pos.y,0});
     //Projection
     projection := orthographic_projection_matrix(0.0,WINDOW_WIDTH,WINDOW_HEIGHT,0.0,-1.0,1.0);
 
-    model_location      := glGetUniformLocation(tail_shader, "model");
-    view_location       := glGetUniformLocation(tail_shader, "view");
-    projection_location := glGetUniformLocation(tail_shader, "projection");
-    tint_location       := glGetUniformLocation(tail_shader, "tint");
+    //****************
+    //Drawing Pickups
+    //****************
+    //Model
+    for pickup : pickups {
+        pickup_model :=  translate(Matrix4_Identity,cycle_point3(pickup.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
+
+        glBindVertexArray(head_VAO);
+        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *pickup_model);
+        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(tint_location, 1,1,1);
+        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+        glBindTexture(GL_TEXTURE_2D, apple_texture);
+        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+
+
+        glBindBuffer(GL_ARRAY_BUFFER,0);
+        glBindTexture(GL_TEXTURE_2D,0);
+    }
+
+    //****************
+    //Drawing Tail
+    //****************
+
 
 
     glBindVertexArray(tail_VAO);
@@ -669,117 +732,14 @@ new_render_stuff :: () {
     //glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, head_texture);
     glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
-
-    err := glGetError();
-    if err != GL_NO_ERROR then
-        print("\nOpenGL Error: 0x0%",formatInt(err,16));
-
-    glBindBuffer(GL_ARRAY_BUFFER,0);
-    glBindTexture(GL_TEXTURE_2D,0);
 }
-/*
-render_stuff :: () {
 
-
-    glClearColor(0.369, 0.69, 0.588,1.0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    //glColor4f(0.086, 0.322, 0.306,1.0);
-
-    width := WINDOW_WIDTH;
-    height := WINDOW_HEIGHT;
-    //Head
-    padding := 10.0;
-
-    head_pos := snake.head;
-    head_pos = cycle_point(head_pos,padding);
-
-    glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
-    draw_circle(head_pos,HEAD_SIZE,32);
-
-    //Tail
-    glColor4f(0.086, 0.322, 0.306,1.0);
-
-    glBegin(GL_TRIANGLE_STRIP);
-    previous_point := snake.head;
-    for 0..snake.tail.count-1 {
-        center_cycled := previous_point;
-        center_cycled = cycle_point(center_cycled,padding);
-
-        tail_cycled := snake.tail[it];
-        tail_cycled = cycle_point(tail_cycled,padding);
-
-        dist := distance(tail_cycled, center_cycled);
-
-        previous_point = tail_cycled;
-        if dist > 16.0 {
-            glEnd();
-            glBegin(GL_TRIANGLE_STRIP);
-            continue;
-        }
-
-        scale : float = 1.0 - (cast(float)(it) / (snake.tail.count));
-        dir := normalize(tail_cycled - center_cycled);
-
-        p0 := to_clip_space(center_cycled + rotate(dir, TAU/4)*scale*HEAD_SIZE);
-        p1 := to_clip_space(center_cycled + rotate(dir,-TAU/4)*scale*HEAD_SIZE);
-
-        glVertex2f(p0.x,p0.y);
-        glVertex2f(p1.x,p1.y);
-    }
-
-    //Draw last tip of the tail:
-    last_point := cycle_point(snake.tail[snake.tail.count-1],padding);
-    dir := normalize(last_point - previous_point);
-    p0 := to_clip_space(last_point); //to_clip_space(last_point + rotate(dir, TAU/4)*scale*HEAD_SIZE);
-
-    glVertex2f(p0.x,p0.y);
-    glVertex2f(p0.x,p0.y);
-
-    glEnd();
-
-    if IS_DEBUGGING_GRAPHICS then
-        glColor4f(0.3, 1, 0.306,1.0); //Debug color
-
-    for pickup : pickups {
-        draw_circle(cycle_point(pickup.point),pickup.radius,6);
-    }
-
-    //Debug drawing...
-    //Circle
-
-    if true {
-        if IS_DEBUGGING_GRAPHICS {
-            glBegin(GL_LINES);
-            draw_wired_circle(cycle_point(snake.head),HEAD_SIZE,16);
-            glEnd();
-            glColor4f(1.0, 0.0, 0.0,1.0); //Debug color
-            for TAIL_POINTS_SKIPPED..snake.tail.count-1 {
-                glBegin(GL_LINES);
-                scale : float = 1.0 - (cast(float)it / (snake.tail.count));
-                center := cycle_point(snake.tail[it]);
-                draw_wired_circle(center,scale*HEAD_SIZE,16);
-                glEnd();
-            }
-        }
-    }
-
-    //Drawing point dots
-    if IS_DEBUGGING_GRAPHICS {
-        glColor4f(0.0, 0.0, 0.0,1.0); //Debug color
-
-        //Body
-        for point : snake.tail {
-            draw_circle(cycle_point(point),0.05);
-        }
-    }
-}
-*/
 cycle_point3 :: (point : Vector2, padding : float = 0.0) -> Vector3 {
     return .{fmod_cycling(point.x + WINDOW_WIDTH ,  WINDOW_WIDTH),
              fmod_cycling(point.y + WINDOW_HEIGHT,  WINDOW_HEIGHT),
              0};
 }
+
 cycle_point2 :: (point : Vector2, padding : float = 0.0) -> Vector2 {
     return .{fmod_cycling(point.x + WINDOW_WIDTH ,  WINDOW_WIDTH),
              fmod_cycling(point.y + WINDOW_HEIGHT,  WINDOW_HEIGHT)};
@@ -806,84 +766,42 @@ generate_fan_circle :: (vertices : *[..]float, radius : float = 1.0, count : int
         array_add(vertices,sin(angle_0) * radius);
     }
 }
+
 to_grid :: (position : Vector2) -> Vector2 {
     return .{floor(position.x),floor(position.y)};
 }
-/*
-draw_quad :: (pos : Vector2, size : float) {
-    p0 := to_clip_space(pos + Vector2.{-size , size});
-    p1 := to_clip_space(pos + Vector2.{-size ,-size});
-    p2 := to_clip_space(pos + Vector2.{ size ,-size});
-    p3 := to_clip_space(pos + Vector2.{ size , size});
 
-    glVertex2f(p0.x,p0.y);
-    glVertex2f(p1.x,p1.y);
-    glVertex2f(p2.x,p2.y);
-
-    glVertex2f(p0.x,p0.y);
-    glVertex2f(p2.x,p2.y);
-    glVertex2f(p3.x,p3.y);
-}
-*/
-
-/*
-draw_circle :: (pos : Vector2, radius : float, count : int = 8) {
-    glBegin(GL_TRIANGLE_FAN);
-    center := to_clip_space(pos);
-    glVertex2f(center.x,center.y);
-    for 0..count {
-        angle_0 := (it / cast(float)count) * TAU;
-        p0 := to_clip_space(pos + .{cos(angle_0),sin(angle_0)}*radius);
-        glVertex2f(p0.x,p0.y);
-    }
-    glEnd();
-}*/
-/*
-draw_wired_circle :: (pos : Vector2, radius : float, count : int = 8) {
-    px := to_clip_space(pos + Vector2.{0,1}*radius);
-    for 1..count {
-        angle_0 := (it / cast(float)count) * TAU;
-        angle_1 := ((it-1) / cast(float)count) * TAU;
-
-        p0 := to_clip_space(pos + .{cos(angle_0),sin(angle_0)}*radius);
-        p1 := to_clip_space(pos + .{cos(angle_1),sin(angle_1)}*radius);
-
-        glVertex2f(p0.x,p0.y);
-        glVertex2f(p1.x,p1.y);
-    }
-}*/
-/*
-draw_line :: (p0 : Vector2, p1 : Vector2) {
-    clip_point := to_clip_space(p0);
-    clip_point2 := to_clip_space(p1);
-    glVertex2f(clip_point.x,clip_point.y);
-    glVertex2f(clip_point2.x,clip_point2.y);
-}*/
 angle_between :: (a : Vector2, b : Vector2) -> float {
     return atan2(b.y,b.x) - atan2(a.y,a.x);
 }
+
 Snake :: struct {
     head : Vector2;
     tail : [..]Vector2;
 }
+
 GraphicBuffers :: struct {
     tail : [..]Vector2;
     tail_cuts : [..]s32;
 }
+
 KeyState :: struct {
     was_just_pressed : bool;
     is_pressed : bool;
     awaits_reset : bool;
 }
+
 PickUp :: struct {
     point : Vector2;
     radius : float;
     type : Pickup_Type;
 }
+
 Pickup_Type :: enum u32 {
     APPLE;
     ORANGE;
 }
+
 #import "Basic";
 #import "Math";
 #import "Window_Creation";
