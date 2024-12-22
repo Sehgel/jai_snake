@@ -58,10 +58,25 @@ tail_points_to_add : int;
 tail_VBO : u32;
 tail_VAO : u32;
 tail_shader : GLuint;
+tail_texture : u32;
 
 head_VAO : u32;
 head_VBO : u32;
+head_EBO : u32;
+head_texture : u32;
 head_vertices : [..]float;
+head_rotation : Quaternion;
+
+sprite_quad_vertices := float.[
+    -0.5,-0.5,0.0,0.0,
+     0.5,-0.5,1.0,0.0,
+     0.5, 0.5,1.0,1.0,
+    -0.5, 0.5,0.0,1.0,
+];
+sprite_indices := u32.[
+    0,1,2,
+    0,2,3
+];
 
 camera_pos : Vector2;
 
@@ -490,27 +505,63 @@ prepare_render :: () {
     //Shaders
     tail_shader = create_shader_program("shaders/tail/tail_vertex.glsl","shaders/tail/tail_fragment.glsl");
 
-
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
 
-    //***********************************
-    //***************Head****************
-    //***********************************
-    generate_fan_circle(*head_vertices,HEAD_SIZE,32);
+    //**********************************
+    //******Resources loading***********
+    //**********************************
+    //stbi_set_flip_vertically_on_load(1);
 
-    glGenVertexArrays(1,*head_VAO);
-    glGenBuffers(1,*head_VBO);
+    //HEAD TEXTURE
+    {
+        glGenTextures(1,*head_texture);
+        glBindTexture(GL_TEXTURE_2D,head_texture);
 
-    glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
-    glBufferData(GL_ARRAY_BUFFER,head_vertices.count*size_of(float),head_vertices.data,GL_STATIC_DRAW);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glBindVertexArray(head_VAO);
+        width       : s32;
+        height      : s32;
+        nr_channels : s32;
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
+        data := stbi_load("sprites/snake_head.png",*width,*height,*nr_channels,4);
+        if data {
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        } else {
+            print("\nFailed to load texture: snake_head.png");
+        }
+        stbi_image_free(data);
+    }
+    //TAIL TEXTURE
+    {
+        glGenTextures(1,*tail_texture);
+        glBindTexture(GL_TEXTURE_2D,tail_texture);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        width       : s32;
+        height      : s32;
+        nr_channels : s32;
+
+        data := stbi_load("sprites/snake_body.png",*width,*height,*nr_channels,4);
+        if data {
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        } else {
+            print("\nFailed to load texture: snake_body.png");
+        }
+        stbi_image_free(data);
+    }
+
 
     //**********************************
     //***************Tail***************
@@ -527,8 +578,34 @@ prepare_render :: () {
     glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
     glEnableVertexAttribArray(0);
 
+    //***********************************
+    //***************HEAD****************
+    //***********************************
 
+    //VBO
+    glGenBuffers(1,*head_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+    glBufferData(GL_ARRAY_BUFFER,sprite_quad_vertices.count*size_of(float),sprite_quad_vertices.data,GL_STATIC_DRAW);
+    //VAO
+    glGenVertexArrays(1,*head_VAO);
+    glBindVertexArray(head_VAO);
+    //Vertex Pointers
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*size_of(float),xx 0);
+    glEnableVertexAttribArray(0);
+    //Texture uvs
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,4*size_of(float), xx (2 * size_of(float)));
+    glEnableVertexAttribArray(1);
+
+    //EBO
+    glGenBuffers(1,*head_EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, head_EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sprite_indices.count*size_of(u32),*sprite_indices,GL_STATIC_DRAW);
+
+
+    //glUniform1i(glGetUniformLocation(tail_shader, "text"), 0);
 }
+//*****END PREPARE RENDER*****
+
 new_render_stuff :: () {
     padding := 10.0;
     glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
@@ -548,13 +625,12 @@ new_render_stuff :: () {
     view = make_translation_matrix4(.{camera_pos.x,camera_pos.y,0});
     //Projection
     projection := orthographic_projection_matrix(0.0,WINDOW_WIDTH,WINDOW_HEIGHT,0.0,-1.0,1.0);
-    //Model
-    head_model := translate(Matrix4_Identity,cycle_point3(snake.head));
 
     model_location      := glGetUniformLocation(tail_shader, "model");
     view_location       := glGetUniformLocation(tail_shader, "view");
     projection_location := glGetUniformLocation(tail_shader, "projection");
     tint_location       := glGetUniformLocation(tail_shader, "tint");
+
 
     glBindVertexArray(tail_VAO);
 
@@ -562,9 +638,10 @@ new_render_stuff :: () {
     glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *tail_model);
     glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
     glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-    glUniform3f(tint_location, 0.086, 0.322, 0.306);
-    //glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glUniform3f(tint_location, 1,1,1);
+    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferSubData(GL_ARRAY_BUFFER,0,2*graphics.tail.count*size_of(float),graphics.tail.data);
+    glBindTexture(GL_TEXTURE_2D, tail_texture);
 
     start : s32 = 0;
     for cut : graphics.tail_cuts {
@@ -577,19 +654,28 @@ new_render_stuff :: () {
     //****************
     //Drawing Head
     //****************
+    //Model
+    angle := angle_between(.{0,-1}, direction);
+    set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
+    head_model :=  translate(Matrix4_Identity,cycle_point3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2) * rotate(Matrix4_Identity,head_rotation);
+
 
     glBindVertexArray(head_VAO);
-
     glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *head_model);
     glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
     glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-    glUniform3f(tint_location, 0.086, 0.322, 0.306);
-    glDrawArrays(GL_TRIANGLE_FAN,0,xx head_vertices.count);
-
+    glUniform3f(tint_location, 1,1,1);
+    glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+    //glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, head_texture);
+    glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
     err := glGetError();
     if err != GL_NO_ERROR then
         print("\nOpenGL Error: 0x0%",formatInt(err,16));
+
+    glBindBuffer(GL_ARRAY_BUFFER,0);
+    glBindTexture(GL_TEXTURE_2D,0);
 }
 /*
 render_stuff :: () {
@@ -773,7 +859,9 @@ draw_line :: (p0 : Vector2, p1 : Vector2) {
     glVertex2f(clip_point.x,clip_point.y);
     glVertex2f(clip_point2.x,clip_point2.y);
 }*/
-
+angle_between :: (a : Vector2, b : Vector2) -> float {
+    return atan2(b.y,b.x) - atan2(a.y,a.x);
+}
 Snake :: struct {
     head : Vector2;
     tail : [..]Vector2;
@@ -804,3 +892,4 @@ Pickup_Type :: enum u32 {
 #import "Random";
 Input :: #import "Input";
 #load "shader_program.jai";
+#import "stb_image";
