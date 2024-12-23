@@ -68,6 +68,7 @@ head_vertices : [..]float;
 head_rotation : Quaternion;
 
 apple_texture : u32;
+rat_texture : u32;
 
 sprite_quad_vertices := float.[
     -0.5,-0.5,0.0,0.0,
@@ -251,7 +252,9 @@ main :: () {
     SDL_Quit();
 }
 
+
 init_game :: () {
+    print("\n%",get_pickup_types_count());
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
@@ -261,10 +264,13 @@ init_game :: () {
 
     create_base_tail();
     is_alive = true;
-    for 0..10 {
-        create_new_pickup_at_random(Pickup_Type.APPLE,0.5*HEAD_SIZE);
+    for 0..2 {
+        create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
     }
-
+    for *pickup : pickups {
+        print("\ntype: %",pickup.type);
+        calculate_next_pickup_target(pickup);
+    }
     //array_add(*graphics.tail_cuts,50);
     //array_add(*graphics.tail_cuts,100);
 }
@@ -285,12 +291,13 @@ update_tail_graphic :: () {
         p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
 
 
-        if distance(last_pc,pc) > WINDOW_WIDTH/2 {
+        if distance(last_pc,pc) >= 10 {
             array_add(*graphics.tail_cuts,xx ((i)*2));
         }
 
-        graphics.tail[i*2] = (p0);
-        graphics.tail[(i*2)+1] = (p1);
+        uv_y :=  (cast(float)(i) / (snake.tail.count/2-1));
+        graphics.tail[i*2] = .{p0.x,p0.y,0.0,uv_y};
+        graphics.tail[(i*2)+1] = .{p1.x,p1.y,1.0,uv_y};
 
         prev = snake.tail[i];
         last_pc = pc;
@@ -393,20 +400,36 @@ process_logic :: () {
         snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
         prev_point = snake.tail[it];
     }
+
+    //Move rats
+    for *pickup : pickups {
+        if pickup.type != .RAT then
+            continue;
+        dist := distance(pickup.target,pickup.point);
+        if dist < 0.01 {
+            calculate_next_pickup_target(pickup);
+            continue;
+        }
+        dir := normalize(pickup.target - pickup.point);
+
+        pickup.point = move_towards(pickup.point,pickup.target,25);
+        //pickup.point.x += dir.x*dt*100;
+    }
+
     //@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
 
-
+    /*@DANGEROUS!!!: This introduces a bug that teleports the whole snake!!!
     //Collision of the head with the skipped tail point
-    /*for i : 4..TAIL_POINTS_SKIPPED {
+    for i : 4..TAIL_POINTS_SKIPPED {
         tail_point := snake.tail[i];
-        dist := distance(cycle_point(snake.head),cycle_point(tail_point));
+        dist := distance(cycle_point2(snake.head),cycle_point2(tail_point));
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
         radius := HEAD_SIZE + HEAD_SIZE * scale;
         if dist < radius then
-            snake.head = constraint_distance(cycle_point(snake.head),cycle_point(tail_point),radius);
-    }*/
-
+            snake.head = constraint_distance(cycle_point2(snake.head),cycle_point2(tail_point),radius);
+    }
+    */
 
     //@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
@@ -430,7 +453,10 @@ process_logic :: () {
                 add_to_tail_deferred();
             }
             destroy_pickup(i);
-            create_new_pickup_at_random(.APPLE,0.5*HEAD_SIZE);
+            create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
+
+            calculate_next_pickup_target(*pickups[pickups.count-1]);
+
         }
     }
 
@@ -476,17 +502,18 @@ add_to_tail :: () {
 
     array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
 
-    array_add(*graphics.tail, snake.tail[snake.tail.count-1] + dir);
-    array_add(*graphics.tail, snake.tail[snake.tail.count-1] + dir);
+    point := snake.tail[snake.tail.count-1] + dir;
+    array_add(*graphics.tail, .{point.x,point.y,0,0});
+    array_add(*graphics.tail, .{point.x,point.y,0,0});
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,2*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,4*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 }
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
 
-    array_add(*graphics.tail, pos);
-    array_add(*graphics.tail, pos);
+    array_add(*graphics.tail, .{pos.x,pos.y,0,0});
+    array_add(*graphics.tail, .{pos.x,pos.y,0,0});
 }
 add_to_tail_deferred :: () {
     tail_points_to_add += 1;
@@ -500,11 +527,12 @@ remove_from_tail :: (index : int) {
 }
 
 create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
-    array_add(*pickups,.{point,radius,type});
+    array_add(*pickups,.{point,radius,type,.{},0.0});
 }
 
-create_new_pickup_at_random :: (type : Pickup_Type, radius : float) {
-    array_add(*pickups,.{.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)},radius,type});
+create_new_pickup_at_random :: (type : Pickup_Type, radius : float){
+    random_pos := Vector2.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
+    create_new_pickup(type,random_pos,radius);
 }
 
 destroy_pickup :: (index : int) {
@@ -594,6 +622,29 @@ prepare_render :: () {
         }
         stbi_image_free(data);
     }
+    //Rat TEXTURE
+    {
+        glGenTextures(1,*rat_texture);
+        glBindTexture(GL_TEXTURE_2D,rat_texture);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        width       : s32;
+        height      : s32;
+        nr_channels : s32;
+
+        data := stbi_load("sprites/rat.png",*width,*height,*nr_channels,4);
+        if data {
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        } else {
+            print("\nFailed to load texture: rat.png");
+        }
+        stbi_image_free(data);
+    }
 
     //**********************************
     //***************Tail***************
@@ -602,13 +653,16 @@ prepare_render :: () {
     //VBO
     glGenBuffers(1,*tail_VBO);
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,2*graphics.tail.count*size_of(float) + 50,graphics.tail.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,4*graphics.tail.count*size_of(float) + 50,graphics.tail.data,GL_DYNAMIC_DRAW);
     //VAO
     glGenVertexArrays(1,*tail_VAO);
     glBindVertexArray(tail_VAO);
     //Vertex Pointers
-    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*size_of(float),xx 0);
     glEnableVertexAttribArray(0);
+    //Texture uvs
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,4*size_of(float), xx (2 * size_of(float)));
+    glEnableVertexAttribArray(1);
 
     //***********************************
     //***************HEAD****************
@@ -673,7 +727,8 @@ new_render_stuff :: () {
     //****************
     //Model
     for pickup : pickups {
-        pickup_model :=  translate(Matrix4_Identity,cycle_point3(pickup.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
+        dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
+        pickup_model :=  translate(Matrix4_Identity,cycle_point3(pickup.point)) * scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2);
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *pickup_model);
@@ -681,37 +736,19 @@ new_render_stuff :: () {
         glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
         glUniform3f(tint_location, 1,1,1);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
-        glBindTexture(GL_TEXTURE_2D, apple_texture);
+
+        if pickup.type == {
+            case .APPLE;
+                glBindTexture(GL_TEXTURE_2D, apple_texture);
+            case .RAT;
+                glBindTexture(GL_TEXTURE_2D, rat_texture);
+        }
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
 
         glBindBuffer(GL_ARRAY_BUFFER,0);
         glBindTexture(GL_TEXTURE_2D,0);
     }
-
-    //****************
-    //Drawing Tail
-    //****************
-
-
-
-    glBindVertexArray(tail_VAO);
-
-    tail_model := Matrix4_Identity;
-    glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *tail_model);
-    glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-    glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-    glUniform3f(tint_location, 1,1,1);
-    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferSubData(GL_ARRAY_BUFFER,0,2*graphics.tail.count*size_of(float),graphics.tail.data);
-    glBindTexture(GL_TEXTURE_2D, tail_texture);
-
-    start : s32 = 0;
-    for cut : graphics.tail_cuts {
-        glDrawArrays(GL_TRIANGLE_STRIP,start,xx (cut-start));
-        start = cut;
-    }
-    glDrawArrays(GL_TRIANGLE_STRIP,start, xx (graphics.tail.count-start));
 
 
     //****************
@@ -732,6 +769,30 @@ new_render_stuff :: () {
     //glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, head_texture);
     glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+
+    //****************
+    //Drawing Tail
+    //****************
+
+
+
+    glBindVertexArray(tail_VAO);
+
+    tail_model := Matrix4_Identity;
+    glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *tail_model);
+    glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
+    glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
+    glUniform3f(tint_location, 1,1,1);
+    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glBufferSubData(GL_ARRAY_BUFFER,0,4*graphics.tail.count*size_of(float),graphics.tail.data);
+    glBindTexture(GL_TEXTURE_2D, tail_texture);
+
+    start : s32 = 0;
+    for cut : graphics.tail_cuts {
+        glDrawArrays(GL_TRIANGLE_STRIP,start,xx (cut-start));
+        start = cut;
+    }
+    glDrawArrays(GL_TRIANGLE_STRIP,start, xx (graphics.tail.count-start));
 }
 
 cycle_point3 :: (point : Vector2, padding : float = 0.0) -> Vector3 {
@@ -775,13 +836,22 @@ angle_between :: (a : Vector2, b : Vector2) -> float {
     return atan2(b.y,b.x) - atan2(a.y,a.x);
 }
 
+move_towards :: (current : Vector2, target : Vector2, speed : float = 1.0, max_delta : float = 0.1) -> Vector2{
+    dir := target - current;
+    dist := length(dir);
+    if (dist <= max_delta*speed)
+    {
+        return target;
+    }
+    return current + dir*speed / dist * max_delta;
+}
 Snake :: struct {
     head : Vector2;
     tail : [..]Vector2;
 }
 
 GraphicBuffers :: struct {
-    tail : [..]Vector2;
+    tail : [..]Vector4;
     tail_cuts : [..]s32;
 }
 
@@ -795,11 +865,27 @@ PickUp :: struct {
     point : Vector2;
     radius : float;
     type : Pickup_Type;
+
+    target : Vector2;
+    counter : float;
 }
 
 Pickup_Type :: enum u32 {
+    START;
     APPLE;
-    ORANGE;
+    RAT;
+    END;
+}
+get_pickup_types_count :: () -> u32{
+    return xx (Pickup_Type.END-Pickup_Type.START);
+}
+get_random_pickup_type :: () -> Pickup_Type{
+    return cast(Pickup_Type)random_get_within_range(1.0,xx get_pickup_types_count());
+}
+
+calculate_next_pickup_target :: (pickup : *PickUp) {
+    pickup.target = .{random_get_within_range(0,WINDOW_WIDTH),pickup.point.y};
+    pickup.counter = 0.0;
 }
 
 #import "Basic";
