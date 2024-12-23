@@ -3,7 +3,9 @@ BASE_HEIGHT   :: 32;
 
 FPS_TARGET :: 240;
 
-MULTIPLIER :: 1080/48;
+MULTIPLIER :: 1080/48
+
+;
 
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
@@ -353,7 +355,7 @@ process_input :: () {
         inputv2.y *= 0.6;
 
     if input != .{0,0} && (direction + input) != .{0,0} {
-        direction = normalize(input);
+        direction = lerp(direction,normalize(input),dt*5);
     }
     //direction = (inputv2);
     //Debug
