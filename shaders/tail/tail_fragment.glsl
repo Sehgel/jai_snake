@@ -5,8 +5,10 @@ out vec4 out_color;
 
 uniform vec3 tint;
 uniform sampler2D text;
+uniform vec2 uv_size;
+uniform vec2 uv_offset;
 
 void main()
 {
-    out_color = texture(text,uv) * vec4(tint,1.0);
+    out_color = texture(text,uv*uv_size + uv_offset) * vec4(tint,1.0);
 }
