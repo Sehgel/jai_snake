@@ -3,9 +3,7 @@ BASE_HEIGHT   :: 32;
 
 FPS_TARGET :: 240;
 
-MULTIPLIER :: 1080/48
-
-;
+MULTIPLIER :: 1080/48;
 
 WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
 WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
@@ -19,6 +17,14 @@ DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
+
+//CAMERA
+cam_shake_strength := 3.0;
+cam_shake_counter : float;
+
+//Time
+time_slow_counter : float;
+time_slow_time : float;
 
 //DEBUG
 IS_DEBUGGING_GRAPHICS := false;
@@ -47,6 +53,7 @@ inputv2 := Vector2.{0,0};
 speed : float = 300;
 last_time : float64;
 dt : float;
+u_dt : float;
 time_scale : float = 1.0;
 frame_counter : u64;
 is_alive : bool = false;
@@ -137,6 +144,7 @@ main :: () {
     while main := !quit {
         now := seconds_since_init();
         dt = xx (now - last_time) * time_scale;
+        u_dt = xx (now - last_time);
 
         event : SDL_Event;
 
@@ -289,7 +297,7 @@ update_tail_graphic :: () {
     for i : 0..snake.tail.count-1 {
         dir_to_last := normalize(prev - snake.tail[i]);
 
-        scale : float = 1.0 - (cast(float)(i) / (snake.tail.count-1));
+        scale : float = 1.0 - (cast(float)(i) / (snake.tail.count*1.5-1));
 
         pc := cycle_point2(prev);
 
@@ -395,6 +403,12 @@ process_logic :: () {
     if !is_alive then
         return;
 
+    //Time slow
+    if time_slow_counter > 0.0 {
+        time_scale = min(time_scale + u_dt/time_slow_time,1.0);
+        time_slow_counter = max(time_slow_counter-u_dt,0.0);
+    }
+
     //Move head
     move_dir := direction;
     move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
@@ -447,6 +461,7 @@ process_logic :: () {
             print("\nCollided with tail: % of %",i,snake.tail.count);
             print("\nHead at: %, other at: %",cycle_point2(snake.head),snake.tail[i]);
             kill();
+            shake_camera(0.2,10);
             //cut_tail_at(i);
             break;
         }
@@ -462,7 +477,8 @@ process_logic :: () {
             create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
 
             calculate_next_pickup_target(*pickups[pickups.count-1]);
-
+            shake_camera(0.2,1.5);
+            slow_time_for(0.1,0.25);
         }
     }
 
@@ -752,7 +768,14 @@ new_render_stuff :: () {
 
     //View
     view := Matrix4_Identity;
-    view = make_translation_matrix4(.{camera_pos.x,camera_pos.y,0});
+
+    cam_shake : Vector2;
+
+    if cam_shake_counter > 0.0 {
+        cam_shake = Vector2.{random_get_within_range(-1.0,1.0),random_get_within_range(-1.0,1.0)};
+        cam_shake_counter -= u_dt;
+    }
+    view = make_translation_matrix4(.{camera_pos.x+cam_shake.x*cam_shake_strength,camera_pos.y+cam_shake.x*cam_shake_strength,0});
     //Projection
     projection := orthographic_projection_matrix(0.0,WINDOW_WIDTH,WINDOW_HEIGHT,0.0,-1.0,1.0);
 
@@ -788,6 +811,33 @@ new_render_stuff :: () {
         glBindTexture(GL_TEXTURE_2D,0);
     }
 
+
+
+    //****************
+    //Drawing Tailtip
+    //****************
+    //Model
+    {
+        tail_direction := normalize(snake.tail[snake.tail.count-3]-snake.tail[snake.tail.count-2]);
+        angle := angle_between(.{0,-1},tail_direction);
+        tail_tip_rotation : Quaternion;
+        set_from_axis_and_angle(*tail_tip_rotation,.{0,0,1},xx angle);
+        head_model :=  translate(Matrix4_Identity,cycle_point3(snake.tail[snake.tail.count-2])) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2.25)  * rotate(Matrix4_Identity,tail_tip_rotation);
+
+        glBindVertexArray(head_VAO);
+        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *head_model);
+        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(tint_location, 1,1,1);
+
+        uv_offset := get_atlas_uv_offset(xx 11);
+        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+        //glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+    }
 
     //****************
     //Drawing Head
@@ -962,6 +1012,17 @@ is_pickup_nearbyv2 :: (point : Vector2, look_direction : Vector2, range : float,
         }
     }
     return false;
+}
+
+shake_camera :: (time : float, strength : float) {
+    cam_shake_counter = time;
+    cam_shake_strength = strength;
+}
+
+slow_time_for :: (time : float, time_scale_start : float = 0.0) {
+    time_slow_time = time;
+    time_slow_counter = time;
+    time_scale = time_scale_start;
 }
 
 #import "Basic";
