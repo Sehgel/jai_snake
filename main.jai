@@ -81,13 +81,14 @@ sprite_indices := u32.[
     0,1,2,
     0,2,3
 ];
+
+SPRITE_ATLAS_SIZE :: 64.0;
 sprite_atlas : *u8;
 sprite_atlas_texture : u32;
 sprite_atlas_width : s32;
 sprite_atlas_height : s32;
 sprite_atlas_uv_size : Vector2;
 sprite_atlas_uv_correction_offset : Vector2;
-
 camera_pos : Vector2;
 
 main :: () {
@@ -261,7 +262,6 @@ main :: () {
 
 
 init_game :: () {
-    print("\n%",get_pickup_types_count());
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
@@ -275,7 +275,6 @@ init_game :: () {
         create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
     }
     for *pickup : pickups {
-        print("\ntype: %",pickup.type);
         calculate_next_pickup_target(pickup);
     }
     //array_add(*graphics.tail_cuts,50);
@@ -579,9 +578,9 @@ prepare_render :: () {
         } else {
             print("\nFailed to load texture: sprites_atlas.png");
         }
-        sprite_atlas_uv_size = .{64.0/sprite_atlas_width,64.0/sprite_atlas_height};
+        sprite_atlas_uv_size = .{SPRITE_ATLAS_SIZE/sprite_atlas_width,SPRITE_ATLAS_SIZE/sprite_atlas_height};
         sprite_atlas_uv_correction_offset = .{1.0 / (sprite_atlas_width/4),1.0 / (sprite_atlas_height/4)};
-        print("\nCorrection offset: %",sprite_atlas_uv_correction_offset);
+        print("\nSprite Atlas UV Correction offset: %",sprite_atlas_uv_correction_offset);
         sprite_atlas_uv_size -= sprite_atlas_uv_correction_offset;
         stbi_image_free(sprite_atlas);
     }
@@ -805,7 +804,15 @@ new_render_stuff :: () {
         glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
         glUniform3f(tint_location, 1,1,1);
-        uv_offset := get_atlas_uv_offset(0);
+
+        sprite_index := 0;
+        if !is_alive {
+            sprite_index = 20;
+        }
+        else{
+            sprite_index = ifx is_pickup_nearbyv2(cycle_point2(snake.head),snake.head-snake.tail[0],100.0) then 10 else 0;
+        }
+        uv_offset := get_atlas_uv_offset(xx sprite_index);
         glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
@@ -924,8 +931,8 @@ Pickup_Type :: enum u32 {
 }
 get_atlas_uv_offset :: (index : s32) -> Vector2 {
     y : float = xx (index / (sprite_atlas_width/64));
-    y = (y*64.0) / sprite_atlas_height;
-    uv_offset := Vector2.{index * 64.0/sprite_atlas_width,y};
+    y = (y*SPRITE_ATLAS_SIZE) / sprite_atlas_height;
+    uv_offset := Vector2.{index * SPRITE_ATLAS_SIZE/sprite_atlas_width,y};
     return uv_offset + sprite_atlas_uv_correction_offset/2;
 }
 get_pickup_types_count :: () -> u32{
@@ -938,6 +945,23 @@ get_random_pickup_type :: () -> Pickup_Type{
 calculate_next_pickup_target :: (pickup : *PickUp) {
     pickup.target = .{random_get_within_range(0,WINDOW_WIDTH),pickup.point.y};
     pickup.counter = 0.0;
+}
+
+is_pickup_nearby :: (point : Vector2, radius : float) -> bool {
+    for pickup : pickups {
+       if check_collision(point,radius,pickup.point,pickup.radius) return true;
+    }
+    return false;
+}
+
+is_pickup_nearbyv2 :: (point : Vector2, look_direction : Vector2, range : float, dot_treshold : float = 0.5) -> bool {
+    for pickup : pickups {
+        if distance(point,pickup.point) < range {
+            if dot_product(normalize(look_direction),normalize(pickup.point-point)) > dot_treshold then
+                return true;
+        }
+    }
+    return false;
 }
 
 #import "Basic";
