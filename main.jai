@@ -1,4 +1,4 @@
-    BASE_WIDTH    :: 32;
+BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
 
 FPS_TARGET :: 240;
@@ -355,7 +355,7 @@ process_input :: () {
         inputv2.y *= 0.6;
 
     if input != .{0,0} && (direction + input) != .{0,0} {
-        direction = lerp(direction,normalize(input),dt*5);
+        direction = normalize(lerp(direction,normalize(input),dt*10));
     }
     //direction = (inputv2);
     //Debug
@@ -647,7 +647,7 @@ prepare_render :: () {
         }
         stbi_image_free(data);
     }
-
+    
     //**********************************
     //***************Tail***************
     //**********************************
