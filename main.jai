@@ -44,6 +44,7 @@ key_pause : KeyState;
 
 snake : Snake;
 pickups : [..]PickUp;
+obstacles : [..]Obstacle;
 
 graphics : GraphicBuffers;
 
@@ -273,6 +274,15 @@ init_game :: () {
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
+    //Generate obstacles
+    array_add(*obstacles,Obstacle.{CENTER_POINT+.{0,128},HEAD_SIZE});
+    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-24,128+48},HEAD_SIZE});
+    array_add(*obstacles,Obstacle.{CENTER_POINT+.{0,128+48},HEAD_SIZE});
+
+    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-48,128},HEAD_SIZE});
+    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-48,128+24},HEAD_SIZE});
+    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-48,128+24+24},HEAD_SIZE});
+
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
     //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
@@ -491,6 +501,35 @@ process_logic :: () {
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
                 pickup.point = constraint_distance(cycle_point2(pickup.point),cycle_point2(tail_point),radius);
+        }
+    }
+
+    //Collision with the head and obstacles
+    for *obstacle,j : obstacles {
+        dist := distance(cycle_point2(obstacle.point),cycle_point2(snake.head));
+        radius := obstacle.radius + HEAD_SIZE;
+        if dist < radius {
+            snake.head = constraint_distance(cycle_point2(snake.head),cycle_point2(obstacle.point),radius);
+            head_dir := normalize(snake.head - snake.tail[0]);
+            obstacle_normal := normalize(obstacle.point-snake.head);
+
+            dot := dot_product(direction,obstacle_normal);
+            if dot > 0.9 then
+                kill();
+            print("\nDot: %",dot);
+        }
+    }
+
+    //Collision of the tail with obstacles
+    for #v2 < *tail_point,i : snake.tail {
+        for *obstacle,j : obstacles {
+            dist := distance(cycle_point2(obstacle.point),cycle_point2(tail_point));
+            scale : float = 1.0 - (cast(float)i / (snake.tail.count));
+
+            radius := obstacle.radius + HEAD_SIZE * scale;
+            if dist < radius {
+                snake.tail[i] = constraint_distance(cycle_point2(tail_point),cycle_point2(obstacle.point),radius);
+            }
         }
     }
 
@@ -743,6 +782,7 @@ prepare_render :: () {
 
 //*****END PREPARE RENDER*****
 }
+
 new_render_stuff :: () {
 
     error := glGetError();
@@ -779,10 +819,35 @@ new_render_stuff :: () {
     //Projection
     projection := orthographic_projection_matrix(0.0,WINDOW_WIDTH,WINDOW_HEIGHT,0.0,-1.0,1.0);
 
+
+    //****************
+    //Drawing Obstacles
+    //****************
+    for obstacle : obstacles {
+        obstacle_model :=  translate(Matrix4_Identity,cycle_point3(obstacle.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*obstacle.radius*2);
+
+        glBindVertexArray(head_VAO);
+        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *obstacle_model);
+        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(tint_location, 1,1,1);
+        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);//@TODO: CHANGE head_VBO to sprites_VBO
+
+        uv_offset : Vector2;
+        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+        uv_offset = get_atlas_uv_offset(4);
+        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+
+
+        glBindBuffer(GL_ARRAY_BUFFER,0);
+        glBindTexture(GL_TEXTURE_2D,0);
+    }
+
     //****************
     //Drawing Pickups
     //****************
-    //Model
     for pickup : pickups {
         dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
         pickup_model :=  translate(Matrix4_Identity,cycle_point3(pickup.point)) * scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2);
@@ -948,6 +1013,7 @@ move_towards :: (current : Vector2, target : Vector2, speed : float = 1.0, max_d
     }
     return current + dir*speed / dist * max_delta;
 }
+
 Snake :: struct {
     head : Vector2;
     tail : [..]Vector2;
@@ -973,21 +1039,29 @@ PickUp :: struct {
     counter : float;
 }
 
+Obstacle :: struct {
+    point : Vector2;
+    radius : float;
+}
+
 Pickup_Type :: enum u32 {
     START;
     APPLE;
     RAT;
     END;
 }
+
 get_atlas_uv_offset :: (index : s32) -> Vector2 {
     y : float = xx (index / (sprite_atlas_width/64));
     y = (y*SPRITE_ATLAS_SIZE) / sprite_atlas_height;
     uv_offset := Vector2.{index * SPRITE_ATLAS_SIZE/sprite_atlas_width,y};
     return uv_offset + sprite_atlas_uv_correction_offset/2;
 }
+
 get_pickup_types_count :: () -> u32{
     return xx (Pickup_Type.END-Pickup_Type.START);
 }
+
 get_random_pickup_type :: () -> Pickup_Type{
     return cast(Pickup_Type)random_get_within_range(1.0,xx get_pickup_types_count());
 }
