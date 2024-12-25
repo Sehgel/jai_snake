@@ -10,6 +10,7 @@ WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
 CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 //CENTER_POINT :: Vector2.{0,0};
+PADDING :: 10.0;
 
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.1;
@@ -17,6 +18,7 @@ DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
+WALL_SIZE :: 16;
 
 //CAMERA
 cam_shake_strength := 3.0;
@@ -269,19 +271,27 @@ main :: () {
     SDL_Quit();
 }
 
-
 init_game :: () {
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
     //Generate obstacles
-    array_add(*obstacles,Obstacle.{CENTER_POINT+.{0,128},HEAD_SIZE});
-    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-24,128+48},HEAD_SIZE});
-    array_add(*obstacles,Obstacle.{CENTER_POINT+.{0,128+48},HEAD_SIZE});
+    for i : 0..WINDOW_WIDTH/(WALL_SIZE*2)-1 {
 
-    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-48,128},HEAD_SIZE});
-    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-48,128+24},HEAD_SIZE});
-    array_add(*obstacles,Obstacle.{CENTER_POINT+.{-48,128+24+24},HEAD_SIZE});
+        /*if it % 2 != 0 then
+            continue;
+            */
+        print("\n%",i);
+        for j : 0..WINDOW_HEIGHT/(WALL_SIZE*2)-1 {
+
+            if random_get_within_range(0,100) > 95 {
+                pos := Vector2.{xx (i*(WALL_SIZE*2) + WALL_SIZE),xx (j*(WALL_SIZE*2) + WALL_SIZE)};
+                pos.x += PADDING;
+                pos.y += PADDING;
+                array_add(*obstacles,Obstacle.{pos,WALL_SIZE});
+            }
+        }
+    }
 
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
@@ -332,6 +342,7 @@ update_tail_graphic :: () {
 kill :: () {
     is_alive = false;
     time_scale = 0;
+    shake_camera(0.2,10);
     print("\n[%]You lost!",frame_counter);
 }
 
@@ -423,7 +434,7 @@ process_logic :: () {
     move_dir := direction;
     move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
     snake.head += move_dir * speed * dt;
-    //print("\nPos: %",snake.head);
+
     //Move body
     prev_point := snake.head;
     for 0..snake.tail.count-1 {
@@ -464,6 +475,10 @@ process_logic :: () {
     //@IMPORTANT: Consider going backwards on the collision checking to check first the smallest parts of the tail
     //Collision with the dead and the tail
 
+    snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
+    print("\nSnake head: %",snake_head_wraps);
+
+
 
     for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
@@ -471,7 +486,6 @@ process_logic :: () {
             print("\nCollided with tail: % of %",i,snake.tail.count);
             print("\nHead at: %, other at: %",cycle_point2(snake.head),snake.tail[i]);
             kill();
-            shake_camera(0.2,10);
             //cut_tail_at(i);
             break;
         }
@@ -495,40 +509,44 @@ process_logic :: () {
     //Collision of the tail with pickups
     for *tail_point,i : snake.tail {
         for *pickup,j : pickups {
-            dist := distance(cycle_point2(pickup.point),cycle_point2(tail_point));
+            dist := distance(pickup.point,cycle_point2(tail_point));
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := pickup.radius + HEAD_SIZE * scale;
             if dist < radius then
-                pickup.point = constraint_distance(cycle_point2(pickup.point),cycle_point2(tail_point),radius);
+                pickup.point = constraint_distance(pickup.point,cycle_point2(tail_point),radius);
         }
     }
 
-    //Collision with the head and obstacles
+
+
+    //Collision with the *HEAD* and *OBSTACLES*
     for *obstacle,j : obstacles {
-        dist := distance(cycle_point2(obstacle.point),cycle_point2(snake.head));
+        adjusted_obstacle := adjust_wraps(obstacle.point,snake_head_wraps);
+        dist := distance(adjusted_obstacle,snake.head);
         radius := obstacle.radius + HEAD_SIZE;
         if dist < radius {
-            snake.head = constraint_distance(cycle_point2(snake.head),cycle_point2(obstacle.point),radius);
+            snake.head = constraint_distance(snake.head,adjusted_obstacle,radius);
             head_dir := normalize(snake.head - snake.tail[0]);
-            obstacle_normal := normalize(obstacle.point-snake.head);
+            obstacle_normal := normalize(snake.head-adjusted_obstacle);
 
-            dot := dot_product(direction,obstacle_normal);
-            if dot > 0.9 then
+            dot := dot_product(direction,orthonormalize(obstacle_normal));
+            if dot < -0.98 then
                 kill();
-            print("\nDot: %",dot);
+            print("\nDot: %, direction: %, normal: %, ortho: %",dot,direction,obstacle_normal,orthonormalize(obstacle_normal));
         }
     }
 
-    //Collision of the tail with obstacles
+    //Collision of the *TAIL* with *OBSTACLES*
     for #v2 < *tail_point,i : snake.tail {
         for *obstacle,j : obstacles {
-            dist := distance(cycle_point2(obstacle.point),cycle_point2(tail_point));
+            adjusted_obstacle := adjust_wraps(obstacle.point,snake_head_wraps);
+            dist := distance(adjusted_obstacle,tail_point);
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := obstacle.radius + HEAD_SIZE * scale;
             if dist < radius {
-                snake.tail[i] = constraint_distance(cycle_point2(tail_point),cycle_point2(obstacle.point),radius);
+                snake.tail[i] = constraint_distance(tail_point,adjusted_obstacle,radius);
             }
         }
     }
@@ -789,8 +807,7 @@ new_render_stuff :: () {
     if error != GL_NO_ERROR then
         print("\nOpenGL Error: 0x0%",formatInt(error,16));
 
-    padding := 10.0;
-    glViewport(xx -(padding),xx -(padding),xx (WINDOW_WIDTH+padding*2),xx (WINDOW_HEIGHT+padding*2));
+    glViewport(xx -(PADDING),xx -(PADDING),xx (WINDOW_WIDTH+PADDING*2),xx (WINDOW_HEIGHT+PADDING*2));
 
     update_tail_graphic();
 
@@ -1097,6 +1114,18 @@ slow_time_for :: (time : float, time_scale_start : float = 0.0) {
     time_slow_time = time;
     time_slow_counter = time;
     time_scale = time_scale_start;
+}
+
+orthonormalize :: (v : Vector2) -> Vector2 {
+    if abs(v.x) > abs(v.y) {
+        return .{ifx v.x > 0.0 then 1.0 else -1.0,0};
+    }else {
+        return .{0,ifx v.y > 0.0 then 1.0 else -1.0};
+    }
+}
+
+adjust_wraps :: (point : Vector2, wrap_count : Vector2) -> Vector2 {
+    return point + .{WINDOW_WIDTH,WINDOW_HEIGHT}*wrap_count;
 }
 
 #import "Basic";
