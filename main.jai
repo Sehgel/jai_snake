@@ -15,6 +15,7 @@ PADDING :: 10.0;
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.1;
 DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
+TAIL_END_CUTOFF_MULT :: 1.5;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
@@ -275,6 +276,25 @@ init_game :: () {
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
+    //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
+    //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
+    //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
+    generate_walls();
+    create_base_tail();
+    is_alive = true;
+    for 0..2 {
+        create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
+    }
+    for *pickup : pickups {
+        calculate_next_pickup_target(pickup);
+    }
+    //array_add(*graphics.tail_cuts,50);
+    //array_add(*graphics.tail_cuts,100);
+}
+
+generate_walls :: () {
+
+    array_reset(*obstacles);
     //Generate obstacles
     for i : 0..WINDOW_WIDTH/(WALL_SIZE*2)-1 {
 
@@ -292,21 +312,6 @@ init_game :: () {
             }
         }
     }
-
-    //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
-    //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
-    //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
-
-    create_base_tail();
-    is_alive = true;
-    for 0..2 {
-        create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
-    }
-    for *pickup : pickups {
-        calculate_next_pickup_target(pickup);
-    }
-    //array_add(*graphics.tail_cuts,50);
-    //array_add(*graphics.tail_cuts,100);
 }
 
 update_tail_graphic :: () {
@@ -317,7 +322,7 @@ update_tail_graphic :: () {
     for i : 0..snake.tail.count-1 {
         dir_to_last := normalize(prev - snake.tail[i]);
 
-        scale : float = 1.0 - (cast(float)(i) / (snake.tail.count*1.5-1));
+        scale : float = 1.0 - (cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
 
         pc := cycle_point2(prev);
 
@@ -352,6 +357,7 @@ cut_tail_at :: (index : int) {
 }
 
 restart_game :: () {
+    generate_walls();
     time_scale = 1.0;
     destroy_tail();
     snake.head = CENTER_POINT;
@@ -706,6 +712,8 @@ prepare_render :: () {
     //***********************************
 
 //*****END PREPARE RENDER*****
+    //glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+
 }
 
 new_render_stuff :: () {
@@ -859,6 +867,8 @@ new_render_stuff :: () {
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
     }
+
+
 
     //****************
     //Drawing Tail
