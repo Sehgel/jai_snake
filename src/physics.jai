@@ -94,7 +94,7 @@ resolve_collisions :: () {
 
             radius := obstacle.radius + HEAD_SIZE * scale;
 
-        result, pos, dir := constraint_circle_aabb_collision(tail_point,HEAD_SIZE*scale,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*2);
+        result, pos, dir := constraint_circle_aabb_collision(tail_point,HEAD_SIZE*scale,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*1.5);
 
                 snake.tail[i] = pos;
         }
