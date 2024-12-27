@@ -38,3 +38,11 @@ orthonormalize :: (v : Vector2) -> Vector2 {
 adjust_wraps :: (point : Vector2, wrap_count : Vector2) -> Vector2 {
     return point + .{WINDOW_WIDTH,WINDOW_HEIGHT}*wrap_count;
 }
+
+floor_vector2 :: (v : Vector2) -> Vector2 {
+    return .{floor(v.x),floor(v.y)};
+}
+
+floor_vector3 :: (v : Vector3) -> Vector3 {
+    return .{floor(v.x),floor(v.y),floor(v.z)};
+}

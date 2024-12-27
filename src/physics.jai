@@ -78,15 +78,17 @@ resolve_collisions :: () {
         normal := normalize(normal_accum / cast(float)hit_count);
 
         dot := dot_product(normal,normalize(direction));
-        print("\nNormal: %, Direction: %, Dot: %",normal,direction,dot);
-        if dot > 0.99 then
+        if dot > 0.99 {
+            print("\nNormal: %, Direction: %, Dot: %",normal,direction,dot);
             kill();
+        }
     }
 
     //Collision of the *TAIL* with *OBSTACLES*
     for #v2 < *tail_point,i : snake.tail {
+        tail_wraps := Vector2.{floor(tail_point.x/WINDOW_WIDTH),floor(tail_point.y/WINDOW_HEIGHT)};
         for *obstacle,j : obstacles {
-            adjusted_obstacle := adjust_wraps(obstacle.point,snake_head_wraps);
+            adjusted_obstacle := adjust_wraps(obstacle.point,tail_wraps);
             dist := distance(adjusted_obstacle,tail_point);
             scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
 
