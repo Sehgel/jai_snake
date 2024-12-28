@@ -62,6 +62,7 @@ u_dt : float;
 time_scale : float = 1.0;
 frame_counter : u64;
 is_alive : bool = false;
+is_started : bool = false;
 test_point : Vector2;
 test_circle : Vector2;
 
@@ -102,6 +103,8 @@ sprite_atlas_height : s32;
 sprite_atlas_uv_size : Vector2;
 sprite_atlas_uv_correction_offset : Vector2;
 camera_pos : Vector2;
+
+score : u32;
 
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
@@ -249,15 +252,15 @@ main :: () {
         }
 
         process_input();
-        process_logic();
-        new_render_stuff();
+        simulate();
+        render();
         SDL_GL_SwapWindow(window);
 
         reset_temporary_storage();
         //print("\nFPS: %",1/dt);
 
         //Wait routine
-        target_delta := 1.0 / cast(float64) FPS_TARGET;
+        /*target_delta := 1.0 / cast(float64) FPS_TARGET;
 
         sleep_ms := cast(s32) target_delta;
 
@@ -265,7 +268,7 @@ main :: () {
             sleep_milliseconds(sleep_ms);
 
         while seconds_since_init() < now + target_delta { }
-
+        */
         last_time = now;
         frame_counter+=1;
     }
@@ -277,7 +280,7 @@ init_game :: () {
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
-    init_text_rendering();
+    init_text_renderer();
 
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
@@ -323,12 +326,13 @@ generate_walls :: () {
     //Generate obstacles
     for i : 1..WINDOW_WIDTH/(WALL_SIZE*2)-3 {
 
-        /*if it % 2 != 0 then
-            continue;
-            */
         for j : 1..WINDOW_HEIGHT/(WALL_SIZE*2)-3 {
+            //Skip middle row so the snake doesn't immediately crash with a wall
+            if j == cast(int)(WINDOW_HEIGHT/(WALL_SIZE*2))/2 -1 {
+                continue;
+            }
 
-            if random_get_within_range(0,100) > 95 {
+            if random_get_within_range(0,100) > 97 {
                 pos := Vector2.{xx (i*(WALL_SIZE*2) + WALL_SIZE),xx (j*(WALL_SIZE*2) + WALL_SIZE)};
                 pos.x += PADDING;
                 pos.y += PADDING;
@@ -380,7 +384,20 @@ cut_tail_at :: (index : int) {
     graphics.tail.count = index*2;
 }
 
+eat_pickup :: (pickup_index : int) {
+    destroy_pickup_by_index(pickup_index);
+    create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
+
+    calculate_next_pickup_target(*pickups[pickups.count-1]);
+    shake_camera(0.2,1.5);
+    slow_time_for(0.1,0.25);
+
+    score += 100;
+}
+
 restart_game :: () {
+    score = 0;
+    is_started = false;
     generate_walls();
     generate_map_details();
     time_scale = 1.0;
@@ -392,8 +409,15 @@ restart_game :: () {
 }
 
 create_base_tail :: () {
-    for 0..49 {
+    for 0..25 {
         add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
+    }
+    prev_point := snake.head;
+
+    //Constraint
+    for 0..snake.tail.count-1 {
+            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
+            prev_point = snake.tail[it];
     }
 }
 
@@ -420,6 +444,7 @@ process_input :: () {
 
     if input != .{0,0} && (direction + input) != .{0,0} {
         direction = normalize(lerp(direction,normalize(input),dt*10));
+        is_started = true;
     }
     //direction = (inputv2);
     //Debug
@@ -451,7 +476,7 @@ process_input :: () {
     }
 }
 
-process_logic :: () {
+simulate :: () {
     if !is_alive then
         return;
 
@@ -462,15 +487,31 @@ process_logic :: () {
     }
 
     //Move head
-    move_dir := direction;
-    move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
+    move_dir : Vector2;
+    if is_started {
+        //move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
+        // * (cast(float)sin(last_time*15))*15*dt
+        move_dir = direction;
+        move_dir += rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*15*dt;
+    }else{
+        //strife := direction;
+        strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*15*dt;
+        snake.head += strife * speed * dt;
+
+        for *tail_point, i : snake.tail {
+            tail_strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15 - i*0.0075*HEAD_SIZE*2))*15*dt;
+            <<tail_point += tail_strife * speed * dt;
+        }
+    }
     snake.head += move_dir * speed * dt;
 
     //Move body
-    prev_point := snake.head;
-    for 0..snake.tail.count-1 {
-        snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
-        prev_point = snake.tail[it];
+    if is_started {
+        prev_point := snake.head;
+        for 0..snake.tail.count-1 {
+            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
+            prev_point = snake.tail[it];
+        }
     }
 
     //Move rats
@@ -552,7 +593,7 @@ create_new_pickup_at_random :: (type : Pickup_Type, radius : float){
     create_new_pickup(type,random_pos,radius);
 }
 
-destroy_pickup :: (index : int) {
+destroy_pickup_by_index :: (index : int) {
     array_ordered_remove_by_index(*pickups,index);
 }
 
@@ -595,100 +636,6 @@ prepare_render :: () {
         sprite_atlas_uv_size -= sprite_atlas_uv_correction_offset;
         stbi_image_free(sprite_atlas);
     }
-    //HEAD TEXTURE
-    /*
-    {
-        glGenTextures(1,*head_texture);
-        glBindTexture(GL_TEXTURE_2D,head_texture);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        width       : s32;
-        height      : s32;
-        nr_channels : s32;
-
-        data := stbi_load("sprites/snake_head.png",*width,*height,*nr_channels,4);
-        if data {
-            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
-            glGenerateMipmap(GL_TEXTURE_2D);
-        } else {
-            print("\nFailed to load texture: snake_head.png");
-        }
-        stbi_image_free(data);
-    }
-    //TAIL TEXTURE
-    {
-        glGenTextures(1,*tail_texture);
-        glBindTexture(GL_TEXTURE_2D,tail_texture);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        width       : s32;
-        height      : s32;
-        nr_channels : s32;
-
-        data := stbi_load("sprites/snake_body.png",*width,*height,*nr_channels,4);
-        if data {
-            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
-            glGenerateMipmap(GL_TEXTURE_2D);
-        } else {
-            print("\nFailed to load texture: snake_body.png");
-        }
-        stbi_image_free(data);
-    }
-    //Apple TEXTURE
-    {
-        glGenTextures(1,*apple_texture);
-        glBindTexture(GL_TEXTURE_2D,apple_texture);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        width       : s32;
-        height      : s32;
-        nr_channels : s32;
-
-        data := stbi_load("sprites/apple.png",*width,*height,*nr_channels,4);
-        if data {
-            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
-            glGenerateMipmap(GL_TEXTURE_2D);
-        } else {
-            print("\nFailed to load texture: apple.png");
-        }
-        stbi_image_free(data);
-    }
-    //Rat TEXTURE
-    {
-        glGenTextures(1,*rat_texture);
-        glBindTexture(GL_TEXTURE_2D,rat_texture);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        width       : s32;
-        height      : s32;
-        nr_channels : s32;
-
-        data := stbi_load("sprites/rat.png",*width,*height,*nr_channels,4);
-        if data {
-            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,xx width,xx height,0,GL_RGBA,GL_UNSIGNED_BYTE,data);
-            glGenerateMipmap(GL_TEXTURE_2D);
-        } else {
-            print("\nFailed to load texture: rat.png");
-        }
-        stbi_image_free(data);
-    }
-    */
     //**********************************
     //***************Tail***************
     //**********************************
@@ -742,7 +689,7 @@ prepare_render :: () {
 
 }
 
-new_render_stuff :: () {
+render :: () {
 
     error := glGetError();
     if error != GL_NO_ERROR then
@@ -966,19 +913,36 @@ new_render_stuff :: () {
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
     }
+
     //****************
     //Drawing Text
     //****************
+
+    if !is_started {
+        render_text("Move to start!",WINDOW_WIDTH/2-124,WINDOW_HEIGHT/2 - 64,0.75,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
+    } else if is_alive {
+        text := sprint("Score: %",score);
+        render_text(text,WINDOW_WIDTH/2-56, 18,0.5,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
+
+    }
+
+    if !is_alive {
+        render_text("Game over!",WINDOW_WIDTH/2-82,WINDOW_HEIGHT/2 - 32,0.75,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
+
+        score_text := sprint("Score: %",score);
+        render_text(score_text,WINDOW_WIDTH/2-42,WINDOW_HEIGHT/2 + 8,0.5,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
+
+    }
+
     if true{
-        text := sprint("FPS: %",cast(int)(1/dt));
-        render_text(text,600,32,0.5,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
+        text := sprint("FPS: %",cast(int)(1/u_dt));
+        render_text(text,16,WINDOW_HEIGHT -32,0.5,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
         free(text);
     } else {
         print("\nFPS: %",cast(int)(1/dt));
     }
+
 }
-
-
 
 generate_fan_circle :: (vertices : *[..]float, radius : float = 1.0, count : int = 8) {
     array_add(vertices,0);
@@ -1091,4 +1055,4 @@ Input :: #import "Input";
 #load "shader_program.jai";
 #load "src/physics.jai";
 #load "src/math.jai";
-#load "src/text_rendering.jai";
+#load "src/text_renderer.jai";

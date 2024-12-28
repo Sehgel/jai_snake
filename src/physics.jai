@@ -21,26 +21,18 @@ resolve_collisions :: () {
     for #v2 < i : TAIL_POINTS_SKIPPED..snake.tail.count-1 {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count));
         if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(snake.tail[i]),HEAD_SIZE*scale) {
-            print("\nCollided with tail: % of %",i,snake.tail.count);
-            print("\nHead at: %, other at: %",cycle_point2(snake.head),snake.tail[i]);
             kill();
-            //cut_tail_at(i);
             break;
         }
     }
 
-    //Collision of the *HEA* with *PICKUPS*
+    //Collision of the *HEAD* with *PICKUPS*
     for #v2 < pickup,i : pickups {
         if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(pickup.point),pickup.radius) {
             for 0..4 {
                 add_to_tail_deferred();
             }
-            destroy_pickup(i);
-            create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
-
-            calculate_next_pickup_target(*pickups[pickups.count-1]);
-            shake_camera(0.2,1.5);
-            slow_time_for(0.1,0.25);
+            eat_pickup(i);
         }
     }
 
@@ -57,30 +49,27 @@ resolve_collisions :: () {
     }
 
     //Collision with the *HEAD* and *OBSTACLES*
-    normal_accum : Vector2;
-    hit_count : int;
-    for *obstacle,j : obstacles {
-        adjusted_obstacle := adjust_wraps(obstacle.point,snake_head_wraps);
+    {
+        normal_accum : Vector2;
+        hit_count : int;
+        for *obstacle,j : obstacles {
+            adjusted_obstacle := adjust_wraps(obstacle.point,snake_head_wraps);
 
-        result, pos, dir := constraint_circle_aabb_collision(snake.head,HEAD_SIZE,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*2);
-        if result {
-            snake.head = pos;
-            normal_accum += dir;
-            hit_count += 1;
+            result, pos, dir := constraint_circle_aabb_collision(snake.head,HEAD_SIZE,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*2);
+            if result {
+                snake.head = pos;
+                normal_accum += dir;
+                hit_count += 1;
+            }
         }
-         /*{
-            print("\nhead: %, obstacle: %",snake.head,obstacle.point);
-            kill();
-        }*/
-    }
+        if hit_count > 0 {
+            normal := normalize(normal_accum / cast(float)hit_count);
 
-    if hit_count > 0 {
-        normal := normalize(normal_accum / cast(float)hit_count);
-
-        dot := dot_product(normal,normalize(direction));
-        if dot > 0.99 {
-            print("\nNormal: %, Direction: %, Dot: %",normal,direction,dot);
-            kill();
+            dot := dot_product(normal,normalize(direction));
+            if dot > 0.99 {
+                print("\nNormal: %, Direction: %, Dot: %",normal,direction,dot);
+                kill();
+            }
         }
     }
 
@@ -94,9 +83,9 @@ resolve_collisions :: () {
 
             radius := obstacle.radius + HEAD_SIZE * scale;
 
-        result, pos, dir := constraint_circle_aabb_collision(tail_point,HEAD_SIZE*scale,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*1.5);
+            result, pos, dir := constraint_circle_aabb_collision(tail_point,HEAD_SIZE*scale,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*1.5);
 
-                snake.tail[i] = pos;
+            snake.tail[i] = pos;
         }
     }
 }

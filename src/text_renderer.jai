@@ -4,7 +4,7 @@
 text_VAO, text_VBO : u32;
 text_shader : GLuint;
 
-init_text_rendering :: () {
+init_text_renderer :: () {
 
 	ft : FT_Library;
 
