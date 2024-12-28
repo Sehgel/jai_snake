@@ -1,7 +1,7 @@
 BASE_WIDTH    :: 32;
 BASE_HEIGHT   :: 32;
 
-FPS_TARGET :: 240;
+FPS_TARGET :: 9999;
 
 MULTIPLIER :: 1080/48;
 
@@ -276,6 +276,8 @@ main :: () {
 init_game :: () {
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
+
+    init_text_rendering();
 
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
@@ -737,6 +739,7 @@ prepare_render :: () {
 //*****END PREPARE RENDER*****
     //glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
+
 }
 
 new_render_stuff :: () {
@@ -896,7 +899,7 @@ new_render_stuff :: () {
         glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
         glUniform3f(tint_location, 1,1,1);
-        
+
         uv_offset := get_atlas_uv_offset(xx 3);
         glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
@@ -936,7 +939,6 @@ new_render_stuff :: () {
     //****************
     //Drawing Head
     //****************
-    //Model
     {
         angle := angle_between(.{0,-1}, direction);
         set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
@@ -963,6 +965,16 @@ new_render_stuff :: () {
         //glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+    }
+    //****************
+    //Drawing Text
+    //****************
+    if true{
+        text := sprint("FPS: %",cast(int)(1/dt));
+        render_text(text,600,32,0.5,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
+        free(text);
+    } else {
+        print("\nFPS: %",cast(int)(1/dt));
     }
 }
 
@@ -1079,3 +1091,4 @@ Input :: #import "Input";
 #load "shader_program.jai";
 #load "src/physics.jai";
 #load "src/math.jai";
+#load "src/text_rendering.jai";
