@@ -1052,7 +1052,7 @@ slow_time_for :: (time : float, time_scale_start : float = 0.0) {
 #import "Random";
 Input :: #import "Input";
 #import "stb_image";
-#load "shader_program.jai";
+#load "src/shader_program.jai";
 #load "src/physics.jai";
 #load "src/math.jai";
 #load "src/text_renderer.jai";
