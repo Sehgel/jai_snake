@@ -80,15 +80,6 @@ init_text_renderer :: () {
 
 	//Shader
 	text_shader = create_shader_program("shaders/text/text_vertex.glsl","shaders/text/text_fragment.glsl");
-
-
-	/*
-	for key, value : text_characters {
-		print("\nKey: %, Value: %",key, value);
-	}
-	*/
-	print("\n!Value: %",<<table_find_pointer(*text_characters,0));
-
 }
 
 render_text :: (text : string, x : float, y : float, scale : float, color : Vector3, projection : *Matrix4) {

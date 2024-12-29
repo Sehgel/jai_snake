@@ -12,10 +12,11 @@ CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 //CENTER_POINT :: Vector2.{0,0};
 PADDING :: 10.0;
 
-TAIL_POINTS_SKIPPED :: 10;
+TAIL_POINTS_SKIPPED :: 20;
 TAIL_ADD_DELAY :: 0.1;
-DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
+DISTANCE_BETWEEN_TAIL_POINTS :: 2.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
+DIGEST_TIME :: 0.75;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
@@ -46,6 +47,8 @@ key_restart : KeyState;
 key_pause : KeyState;
 
 snake : Snake;
+tummy_bloats : [10]Vector2;
+tummy_counters : [10]float;
 pickups : [..]PickUp;
 obstacles : [..]Obstacle;
 map_details : [..]MapDetail;
@@ -74,6 +77,9 @@ tail_VBO : u32;
 tail_VAO : u32;
 tail_shader : GLuint;
 tail_texture : u32;
+
+sprite_shader : GLuint;
+
 
 head_VAO : u32;
 head_VBO : u32;
@@ -287,7 +293,7 @@ init_game :: () {
     //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
     generate_walls();
     generate_map_details();
-    create_base_tail();
+    generate_base_tail();
     is_alive = true;
     for 0..2 {
         create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
@@ -364,8 +370,11 @@ update_tail_graphic :: () {
 
         tail_repeat_factor := 2.0;
         uv_y := cast(float)(i/tail_repeat_factor) / (snake.tail.count/tail_repeat_factor-1);
-        graphics.tail[i*2] = .{p0.x,p0.y,0.0,uv_y};
-        graphics.tail[(i*2)+1] = .{p1.x,p1.y,1.0,uv_y};
+
+        tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
+
+        graphics.tail[i*2] =     .{p0.x,p0.y,0.0,uv_y,tail_percentage};
+        graphics.tail[(i*2)+1] = .{p1.x,p1.y,1.0,uv_y,tail_percentage};
 
         prev = snake.tail[i];
         last_pc = pc;
@@ -385,12 +394,36 @@ cut_tail_at :: (index : int) {
 }
 
 eat_pickup :: (pickup_index : int) {
+
+    found_place := false;
+    for i : 0..tummy_bloats.count-1 {
+        if length(tummy_bloats[i]) <= 0.0 {
+            tummy_bloats[i] = snake.tail[0];
+            tummy_counters[i] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as down
+            found_place = true;
+            break;
+        }
+    }
+    //If no tummy space available just remove the last one, move everything up and set the new one as the first one
+    if !found_place {
+
+        print("\nBefore: %",tummy_counters);
+        for i : 0..tummy_bloats.count-2{
+            tummy_bloats[i] = tummy_bloats[i+1];
+            tummy_counters[i] = tummy_counters[i+1];
+        }
+        print("\nAfter: %",tummy_counters);
+
+        tummy_bloats[tummy_bloats.count-1] = snake.tail[5];//This 5 is the same as up
+        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);
+    }
+
     destroy_pickup_by_index(pickup_index);
     create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
 
     calculate_next_pickup_target(*pickups[pickups.count-1]);
     shake_camera(0.2,1.5);
-    slow_time_for(0.1,0.25);
+    //  slow_time_for(0.3,0.25);
 
     score += 100;
 }
@@ -404,12 +437,21 @@ restart_game :: () {
     destroy_tail();
     snake.head = CENTER_POINT;
     direction = .{1,0};
-    create_base_tail();
+    generate_base_tail();
     is_alive = true;
+
+    //Restart digestion
+    tail_points_to_add = 0;
+
+    //Restart tummy
+    for i : 0..tummy_bloats.count-1 {
+        tummy_bloats[i] = .{0.0,0.0};
+        tummy_counters[i] = 0.0;
+    }
 }
 
-create_base_tail :: () {
-    for 0..25 {
+generate_base_tail :: () {
+    for 0..50 {
         add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
     }
     prev_point := snake.head;
@@ -452,7 +494,7 @@ process_input :: () {
     test_point.y += direction.y*speed*dt;
 
     if key_space{
-        add_to_tail();
+        for 0..10 add_to_tail();
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
@@ -525,18 +567,32 @@ simulate :: () {
         }
         dir := normalize(pickup.target - pickup.point);
 
-        pickup.point = move_towards(pickup.point,pickup.target,25);
+        pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
         //pickup.point.x += dir.x*dt*100;
     }
 
+    //@IMPORTANT: This needs a rework to account for multiple digestions
     //Consume queued tail grows
     if tail_points_to_add > 0 {
         if tail_adding_counter <= 0.0 {
+            /*for 0..tail_points_to_add-1 {
+            }*/
             add_to_tail();
-            tail_adding_counter = TAIL_ADD_DELAY;
             tail_points_to_add -= 1;
+            tail_adding_counter = TAIL_ADD_DELAY;
         }else {
-            tail_adding_counter -= dt;
+            tail_adding_counter -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and down
+        }
+    }
+
+    //Tummy logic
+    for i : 0..tummy_bloats.count-1{
+        if !(tummy_counters[i] <= 0.0) {
+            current_index : u32 = xx ((snake.tail.count-1)*(1.0-tummy_counters[i]));
+            tummy_bloats[i] = *cycle_point2(snake.tail[current_index]);
+            tummy_counters[i] -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and up
+        }else {
+            tummy_bloats[i] = Vector2.{0.0,0.0};
         }
     }
 
@@ -561,20 +617,21 @@ add_to_tail :: () {
     array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
 
     point := snake.tail[snake.tail.count-1] + dir;
-    array_add(*graphics.tail, .{point.x,point.y,0,0});
-    array_add(*graphics.tail, .{point.x,point.y,0,0});
+    array_add(*graphics.tail, .{point.x,point.y,0,0,0});
+    array_add(*graphics.tail, .{point.x,point.y,0,0,0});
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,4*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 }
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
 
-    array_add(*graphics.tail, .{pos.x,pos.y,0,0});
-    array_add(*graphics.tail, .{pos.x,pos.y,0,0});
+    array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
+    array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
 }
 add_to_tail_deferred :: () {
     tail_points_to_add += 1;
+    tail_adding_counter = 1.0;
 }
 
 remove_from_tail :: (index : int) {
@@ -599,6 +656,7 @@ destroy_pickup_by_index :: (index : int) {
 
 prepare_render :: () {
     //Shaders
+    sprite_shader = create_shader_program("shaders/sprite/sprite_vertex.glsl","shaders/sprite/sprite_fragment.glsl");
     tail_shader = create_shader_program("shaders/tail/tail_vertex.glsl","shaders/tail/tail_fragment.glsl");
 
     glEnable(GL_MULTISAMPLE);
@@ -643,16 +701,19 @@ prepare_render :: () {
     //VBO
     glGenBuffers(1,*tail_VBO);
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,4*graphics.tail.count*size_of(float) + 50,graphics.tail.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float) + 100,graphics.tail.data,GL_DYNAMIC_DRAW);
     //VAO
     glGenVertexArrays(1,*tail_VAO);
     glBindVertexArray(tail_VAO);
     //Vertex Pointers
-    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*size_of(float),xx 0);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,5*size_of(float),xx 0);
     glEnableVertexAttribArray(0);
     //Texture uvs
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,4*size_of(float), xx (2 * size_of(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,5*size_of(float), xx (2 * size_of(float)));
     glEnableVertexAttribArray(1);
+    //Texture uvs
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE,5*size_of(float), xx (4 * size_of(float)));
+    glEnableVertexAttribArray(2);
 
     //***********************************
     //***************HEAD****************
@@ -676,7 +737,7 @@ prepare_render :: () {
     glGenBuffers(1,*head_EBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, head_EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sprite_indices.count*size_of(u32),*sprite_indices,GL_STATIC_DRAW);
-    //glUniform1i(glGetUniformLocation(tail_shader, "text"), 0);
+    //glUniform1i(glGetUniformLocation(sprite_shader, "text"), 0);
 
 
     //***********************************
@@ -702,14 +763,14 @@ render :: () {
     glClearColor(0.369, 0.69, 0.588,1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glUseProgram(tail_shader);
+    glUseProgram(sprite_shader);
 
-    model_location      := glGetUniformLocation(tail_shader, "model");
-    view_location       := glGetUniformLocation(tail_shader, "view");
-    projection_location := glGetUniformLocation(tail_shader, "projection");
-    tint_location       := glGetUniformLocation(tail_shader, "tint");
-    uv_size_location       := glGetUniformLocation(tail_shader, "uv_size");
-    uv_offset_location       := glGetUniformLocation(tail_shader, "uv_offset");
+    sprite_model_location      := glGetUniformLocation(sprite_shader, "model");
+    sprite_view_location       := glGetUniformLocation(sprite_shader, "view");
+    sprite_projection_location := glGetUniformLocation(sprite_shader, "projection");
+    sprite_tint_location       := glGetUniformLocation(sprite_shader, "tint");
+    sprite_uv_size_location       := glGetUniformLocation(sprite_shader, "uv_size");
+    sprite_uv_offset_location       := glGetUniformLocation(sprite_shader, "uv_offset");
 
     //View
     view := Matrix4_Identity;
@@ -731,17 +792,17 @@ render :: () {
         detail_model :=  translate(Matrix4_Identity,cycle_point3(detail.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*4);
 
         glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *detail_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *detail_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);//@TODO: CHANGE head_VBO to sprites_VBO
 
         uv_offset : Vector2;
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         uv_offset = get_atlas_uv_offset(xx detail.graphic);
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
 
@@ -756,17 +817,17 @@ render :: () {
         obstacle_model :=  translate(Matrix4_Identity,cycle_point3(obstacle.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*obstacle.radius*2);
 
         glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *obstacle_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *obstacle_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);//@TODO: CHANGE head_VBO to sprites_VBO
 
         uv_offset : Vector2;
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         uv_offset = get_atlas_uv_offset(30);
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
 
@@ -779,14 +840,14 @@ render :: () {
     //****************
     for pickup : pickups {
         dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
-        pickup_model :=  translate(Matrix4_Identity,floor_vector3(cycle_point3(pickup.point))) * scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2);
+        pickup_model :=  translate(Matrix4_Identity,floor_vector3(cycle_point3(pickup.point))) * scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2.25);
 
         glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *pickup_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *pickup_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
 
         uv_offset : Vector2;
@@ -797,7 +858,7 @@ render :: () {
             case .RAT;
                 uv_offset = get_atlas_uv_offset(21);
         }
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
 
@@ -819,14 +880,14 @@ render :: () {
         head_model :=  translate(Matrix4_Identity,cycle_point3(snake.tail[snake.tail.count-2])) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2.25)  * rotate(Matrix4_Identity,tail_tip_rotation);
 
         glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *head_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
 
         uv_offset := get_atlas_uv_offset(xx 19);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
         //glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
@@ -842,14 +903,14 @@ render :: () {
 
 
         glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *head_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
 
         uv_offset := get_atlas_uv_offset(xx 3);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
         //glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
@@ -860,20 +921,29 @@ render :: () {
     //****************
     //Drawing Tail
     //****************
+    glUseProgram(tail_shader);
     {
         glBindVertexArray(tail_VAO);
+        tail_model_location      := glGetUniformLocation(tail_shader, "model");
+        tail_view_location       := glGetUniformLocation(tail_shader, "view");
+        tail_projection_location := glGetUniformLocation(tail_shader, "projection");
+        tail_tint_location       := glGetUniformLocation(tail_shader, "tint");
+        tail_uv_size_location       := glGetUniformLocation(tail_shader, "uv_size");
+        tail_uv_offset_location       := glGetUniformLocation(tail_shader, "uv_offset");
+        tail_tummy_bloats_location       := glGetUniformLocation(tail_shader, "tummy_bloats");
 
         tail_model := Matrix4_Identity;
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *tail_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
+        glUniformMatrix4fv(tail_model_location     , 1, GL_TRUE, xx *tail_model);
+        glUniformMatrix4fv(tail_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(tail_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(tail_tint_location, 1,1,1);
+        glUniform2fv(tail_tummy_bloats_location,xx tummy_bloats.count,xx *tummy_bloats);
         uv_offset := get_atlas_uv_offset(10);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(tail_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(tail_uv_offset_location,uv_offset.x,uv_offset.y);
         glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
-        glBufferSubData(GL_ARRAY_BUFFER,0,4*graphics.tail.count*size_of(float),graphics.tail.data);
+        glBufferSubData(GL_ARRAY_BUFFER,0,5*graphics.tail.count*size_of(float),graphics.tail.data);
 
         start : s32 = 0;
         for cut : graphics.tail_cuts {
@@ -886,6 +956,7 @@ render :: () {
     //****************
     //Drawing Head
     //****************
+    glUseProgram(sprite_shader);
     {
         angle := angle_between(.{0,-1}, direction);
         set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
@@ -893,10 +964,10 @@ render :: () {
 
 
         glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(model_location     , 1, GL_TRUE, xx *head_model);
-        glUniformMatrix4fv(view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tint_location, 1,1,1);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
 
         sprite_index := 0;
         if !is_alive {
@@ -906,8 +977,8 @@ render :: () {
             sprite_index = ifx is_pickup_nearbyv2(cycle_point2(snake.head),snake.head-snake.tail[0],100.0) then 1 else 0;
         }
         uv_offset := get_atlas_uv_offset(xx sprite_index);
-        glUniform2f(uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
-        glUniform2f(uv_offset_location,uv_offset.x,uv_offset.y);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
         //glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
@@ -919,6 +990,7 @@ render :: () {
     //****************
 
     if !is_started {
+        render_text("Move to start!",WINDOW_WIDTH/2-122,WINDOW_HEIGHT/2 - 64,0.75,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
         render_text("Move to start!",WINDOW_WIDTH/2-124,WINDOW_HEIGHT/2 - 64,0.75,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
     } else if is_alive {
         text := sprint("Score: %",score);
@@ -959,9 +1031,22 @@ Snake :: struct {
     tail : [..]Vector2;
 }
 
+TummyBloat :: struct {
+    point : Vector2;
+    counter : float;
+}
+
 GraphicBuffers :: struct {
-    tail : [..]Vector4;
+    tail : [..]Vector5;
     tail_cuts : [..]s32;
+}
+
+Vector5 :: struct {
+    x : float;
+    y : float;
+    z : float;
+    w : float;
+    k : float;
 }
 
 KeyState :: struct {
