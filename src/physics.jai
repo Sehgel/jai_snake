@@ -29,7 +29,7 @@ resolve_collisions :: () {
     //Collision of the *HEAD* with *PICKUPS*
     for #v2 < pickup,i : pickups {
         if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(pickup.point),pickup.radius) {
-            for 0..8 {
+            for 0..32 {
                 add_to_tail_deferred();
             }
             eat_pickup(i);

@@ -112,6 +112,8 @@ camera_pos : Vector2;
 
 score : u32;
 
+eat_particles_pool : [..]*ParticleSystem;
+
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -283,10 +285,19 @@ main :: () {
 }
 
 init_game :: () {
+
+
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
 
     init_text_renderer();
+
+    init_particles_renderer();
+    generate_particles_texture(0,"sprites/blood.png");
+
+    for 0..5 {
+        array_add(*eat_particles_pool,generate_particles_system(0,32));
+    }
 
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
@@ -385,7 +396,7 @@ kill :: () {
     is_alive = false;
     time_scale = 0;
     shake_camera(0.2,10);
-    print("\n[%]You lost!",frame_counter);
+    print("\n[%]You lost!",frame_counter);//nocheckin
 }
 
 cut_tail_at :: (index : int) {
@@ -393,7 +404,20 @@ cut_tail_at :: (index : int) {
     graphics.tail.count = index*2;
 }
 
+get_available_particles_system :: (particle_system_pool : [..]*ParticleSystem) -> *ParticleSystem{//Consider make this generic
+    for particle : particle_system_pool {
+        if !particle.is_active then
+            return particle;
+    }
+    return null;
+}
+
 eat_pickup :: (pickup_index : int) {
+
+    //Particles
+    eat_particle := get_available_particles_system(eat_particles_pool);
+    if eat_particle != null then
+        play_particle_system_at(eat_particle,pickups[pickup_index].point);
 
     found_place := false;
     for i : 0..tummy_bloats.count-1 {
@@ -406,16 +430,13 @@ eat_pickup :: (pickup_index : int) {
     }
     //If no tummy space available just remove the last one, move everything up and set the new one as the first one
     if !found_place {
-
-        print("\nBefore: %",tummy_counters);
         for i : 0..tummy_bloats.count-2{
             tummy_bloats[i] = tummy_bloats[i+1];
             tummy_counters[i] = tummy_counters[i+1];
         }
-        print("\nAfter: %",tummy_counters);
 
         tummy_bloats[tummy_bloats.count-1] = snake.tail[5];//This 5 is the same as up
-        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);
+        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as up
     }
 
     destroy_pickup_by_index(pickup_index);
@@ -423,7 +444,7 @@ eat_pickup :: (pickup_index : int) {
 
     calculate_next_pickup_target(*pickups[pickups.count-1]);
     shake_camera(0.2,1.5);
-    //  slow_time_for(0.3,0.25);
+    slow_time_for(0.3,0.25);
 
     score += 100;
 }
@@ -521,6 +542,10 @@ process_input :: () {
 simulate :: () {
     if !is_alive then
         return;
+
+
+    //Particles
+    update_particle_systems(dt);
 
     //Time slow
     if time_slow_counter > 0.0 {
@@ -622,6 +647,8 @@ add_to_tail :: () {
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
+
+    //print("\nAdded: %",tail_points_to_add);//nocheckin
 }
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
@@ -690,7 +717,6 @@ prepare_render :: () {
         }
         sprite_atlas_uv_size = .{SPRITE_ATLAS_SIZE/sprite_atlas_width,SPRITE_ATLAS_SIZE/sprite_atlas_height};
         sprite_atlas_uv_correction_offset = .{1.0 / (sprite_atlas_width/4),1.0 / (sprite_atlas_height/4)};
-        print("\nSprite Atlas UV Correction offset: %",sprite_atlas_uv_correction_offset);
         sprite_atlas_uv_size -= sprite_atlas_uv_correction_offset;
         stbi_image_free(sprite_atlas);
     }
@@ -739,11 +765,6 @@ prepare_render :: () {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sprite_indices.count*size_of(u32),*sprite_indices,GL_STATIC_DRAW);
     //glUniform1i(glGetUniformLocation(sprite_shader, "text"), 0);
 
-
-    //***********************************
-    //***************APPLE****************
-    //***********************************
-
 //*****END PREPARE RENDER*****
     //glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
@@ -765,6 +786,7 @@ render :: () {
 
     glUseProgram(sprite_shader);
 
+    //TODO: @Do this on preprare_render::()
     sprite_model_location      := glGetUniformLocation(sprite_shader, "model");
     sprite_view_location       := glGetUniformLocation(sprite_shader, "view");
     sprite_projection_location := glGetUniformLocation(sprite_shader, "projection");
@@ -985,15 +1007,18 @@ render :: () {
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
     }
 
+    draw_particles_systems(*view,*projection);
+
+
     //****************
     //Drawing Text
     //****************
 
     if !is_started {
-        render_text("Move to start!",WINDOW_WIDTH/2-122,WINDOW_HEIGHT/2 - 64,0.75,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
+        render_text("Move to start!",WINDOW_WIDTH/2-122,WINDOW_HEIGHT/2 - 64,0.75,.{0.369, 0.69, 0.588}*0.5,*  transpose(projection));
         render_text("Move to start!",WINDOW_WIDTH/2-124,WINDOW_HEIGHT/2 - 64,0.75,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
     } else if is_alive {
-        text := sprint("Score: %",score);
+        text := tprint("Score: %",score);
         render_text(text,WINDOW_WIDTH/2-56, 18,0.5,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
 
     }
@@ -1001,18 +1026,19 @@ render :: () {
     if !is_alive {
         render_text("Game over!",WINDOW_WIDTH/2-82,WINDOW_HEIGHT/2 - 32,0.75,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
 
-        score_text := sprint("Score: %",score);
+        score_text := tprint("Score: %",score);
         render_text(score_text,WINDOW_WIDTH/2-42,WINDOW_HEIGHT/2 + 8,0.5,.{0.369, 0.69, 0.588}*0.5,* transpose(projection));
 
     }
 
     if true{
-        text := sprint("FPS: %",cast(int)(1/u_dt));
+        text := tprint("FPS: %",cast(int)(1/u_dt));
         render_text(text,16,WINDOW_HEIGHT -32,0.5,.{0.369, 0.69, 0.588}*0.75,* transpose(projection));
-        free(text);
     } else {
-        print("\nFPS: %",cast(int)(1/dt));
+        print("\nFPS: %",cast(int)(1/dt));//nocheckin
     }
+
+
 
 }
 
@@ -1141,3 +1167,4 @@ Input :: #import "Input";
 #load "src/physics.jai";
 #load "src/math.jai";
 #load "src/text_renderer.jai";
+#load "src/particles_renderer.jai";
