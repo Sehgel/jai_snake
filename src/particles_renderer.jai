@@ -23,19 +23,21 @@ Particle :: struct {
 	position : Vector3;
 	velocity : Vector3 = Vector3.{1.0,0.0,0.0};
 	rotation : float;
-	scale : float = 8.0;
+	scale : float = 1.0;
+	color : Vector4 = .{1.0,1.0,1.0,1.0};
 }
 
-ParticleSystem :: struct {
+Particles_Emitter :: struct {
 	position : Vector3;
 	texture_alias : u32;
 	duration : float = 1.0;
 	counter  : float = 1.0;
 	is_active : bool = false;
+	drag : float = 0.96;
 	particles : [..]Particle;
 }
 
-particle_systems : [..]ParticleSystem;
+particle_systems : [..]Particles_Emitter;
 
 particles_textures : Table(u32,TextureData);
 
@@ -48,7 +50,7 @@ particles_EBO : u32;
 particles_model_loc : s32;
 particles_view_loc : s32;
 particles_projection_loc : s32;
-particles_texture_loc : s32;
+particles_tint_loc : s32;
 
 init_particles_renderer :: () -> u32 {
     particles_shader = create_shader_program("shaders/particles/particles_vertex.glsl","shaders/particles/particles_fragment.glsl");
@@ -56,8 +58,7 @@ init_particles_renderer :: () -> u32 {
     particles_model_loc = glGetUniformLocation(particles_shader,"model");
     particles_view_loc = glGetUniformLocation(particles_shader,"view");
     particles_projection_loc = glGetUniformLocation(particles_shader,"projection");
-	particles_texture_loc = glGetUniformLocation(particles_shader,"text");
-
+	particles_tint_loc = glGetUniformLocation(particles_shader,"tint");
 	//VAO
 	glGenVertexArrays(1,*particles_VAO);
 	glBindVertexArray(particles_VAO);
@@ -106,49 +107,69 @@ generate_particles_texture :: (texture_alias : u32, texture_file_path : string) 
 	table_add(*particles_textures,texture_alias,.{xx new_texture,width,height});
 }
 
-generate_particles_system :: (texture_alias : u32, particles_count : u32, randomize_velocity : bool = true) -> *ParticleSystem {
+generate_particles_system :: (texture_alias : u32, particles_count : u32, randomize_velocity : bool = true) -> *Particles_Emitter {
 	new_particles : [..]Particle;
 	array_resize(*new_particles,particles_count);
 
-	for *particle : new_particles {
-		particle.velocity = Vector3.{random_get_within_range(-1.0,1.0),random_get_within_range(-1.0,1.0),0.0};
-	}
-
 	//Generate particle system, add to particles to it and add it to the pool
-	array_add(*particle_systems,ParticleSystem.{texture_alias = texture_alias, particles = new_particles});
+	array_add(*particle_systems,Particles_Emitter.{texture_alias = texture_alias, particles = new_particles});
 
 	return *particle_systems[particle_systems.count-1];
 }
 
-play_particle_system_at :: (particle_system : *ParticleSystem, pos : Vector2) {
+play_particle_system_at_point :: (particle_system : *Particles_Emitter, pos : Vector2) {
 	particle_system.position = .{pos.x,pos.y,0.0};
 	particle_system.counter = 0.0;
 	particle_system.is_active = true;
 	reset_particles(particle_system);
-
 }
 
-update_particle_systems :: (delta : float) {
+play_particle_system_random_between_two_point :: (particle_system : *Particles_Emitter, a : Vector2, b : Vector2, velocity_addition : Vector2) {
+
+	middle_point := (a + b)/2;
+	direction := (b - a);
+
+	particle_system.position = .{0.0,0.0,0.0};
+	particle_system.counter = 0.0;
+	particle_system.is_active = true;
+	reset_particles(particle_system);
+
+	for *particle : particle_system.particles {
+		random_point := a + direction * random_get_within_range(0.0,1.0);
+		particle.position.x = random_point.x;
+		particle.position.y = random_point.y;
+
+		particle.velocity.x += velocity_addition.x;
+		particle.velocity.y += velocity_addition.y;
+	}
+}
+
+reset_particles :: (particle_system : *Particles_Emitter) {
+	for *particle : particle_system.particles {
+		particle.position = .{};
+		particle.rotation = random_get_within_range(0,TAU);
+		particle.scale = random_get_within_range(0.25,1.0);
+
+		particle.velocity = Vector3.{random_get_within_range(-1.0,1.0),random_get_within_range(-1.0,1.0),0.0};
+	}
+}
+
+update_particle_systems :: (dt : float) {
 	for *particle_system : particle_systems {
 		if !particle_system.is_active then
 			continue;
 
-		particle_system.counter += delta;
+		particle_system.counter += dt;
 
 		for *particle : particle_system.particles {
-			particle.position += particle.velocity;
+			particle.position += particle.velocity*dt*100;
+			particle.velocity *= particle_system.drag*dt*75;
+			particle.color.w = 1.0 - particle_system.counter;
 		}
 
 		if particle_system.is_active && particle_system.counter >= particle_system.duration{
 			particle_system.is_active = false;
-			print("\nDisabled"); //nocheckin
 		}
-	}
-}
-
-reset_particles :: (particle_system : *ParticleSystem) {
-	for *particle : particle_system.particles {
-		particle.position = .{};
 	}
 }
 
@@ -167,9 +188,9 @@ draw_particles_systems :: (view : *Matrix4, projection : *Matrix4) {
 				continue;
 		texture_data, success := table_find(*particles_textures,particle_system.texture_alias);
 		glBindTexture(GL_TEXTURE_2D, texture_data.id);
-
 		for particle : particle_system.particles {
-			model := translate(Matrix4_Identity,particle_system.position + particle.position) * scale(Matrix4_Identity,.{1,1,1}*particle.scale);
+			glUniform4f(particles_tint_loc, particle.color.x,particle.color.y,particle.color.z,particle.color.w);
+			model := translate(Matrix4_Identity,particle_system.position + particle.position) * rotate(Matrix4_Identity,get_from_axis_and_angle(.{0,0,1},particle.rotation)) * scale(Matrix4_Identity,.{1,1,1}*particle.scale*8.0);
 			glUniformMatrix4fv(particles_model_loc, 1, GL_TRUE, xx *model);
 
 			glDrawArrays(GL_TRIANGLES,0,partices_quad_vertices.count);

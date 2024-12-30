@@ -29,9 +29,7 @@ resolve_collisions :: () {
     //Collision of the *HEAD* with *PICKUPS*
     for #v2 < pickup,i : pickups {
         if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(pickup.point),pickup.radius) {
-            for 0..32 {
-                add_to_tail_deferred();
-            }
+            add_to_tail_deferred(8);
             eat_pickup(i);
         }
     }
@@ -67,7 +65,7 @@ resolve_collisions :: () {
 
             dot := dot_product(normal,normalize(direction));
             if dot > 0.99 {
-                print("\nNormal: %, Direction: %, Dot: %",normal,direction,dot);
+                print("\nNormal: %, Direction: %, Dot: %",normal,direction,dot);// nocheckin
                 kill();
             }
         }

@@ -20,6 +20,7 @@ DIGEST_TIME :: 0.75;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
+PICKUP_RADIUS :: 3;
 WALL_SIZE :: 16;
 
 //CAMERA
@@ -69,8 +70,13 @@ is_started : bool = false;
 test_point : Vector2;
 test_circle : Vector2;
 
-tail_adding_counter : float;
-tail_points_to_add : int;
+
+Digestion :: struct {
+    tail_points_to_add : int;
+    tail_adding_counter : float;
+}
+
+digesting : [..]Digestion;
 
 
 tail_VBO : u32;
@@ -112,7 +118,7 @@ camera_pos : Vector2;
 
 score : u32;
 
-eat_particles_pool : [..]*ParticleSystem;
+eat_particles_pool : [..]*Particles_Emitter;
 
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
@@ -296,7 +302,7 @@ init_game :: () {
     generate_particles_texture(0,"sprites/blood.png");
 
     for 0..5 {
-        array_add(*eat_particles_pool,generate_particles_system(0,32));
+        array_add(*eat_particles_pool,generate_particles_system(0,12));
     }
 
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
@@ -307,7 +313,7 @@ init_game :: () {
     generate_base_tail();
     is_alive = true;
     for 0..2 {
-        create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
+        generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
     }
     for *pickup : pickups {
         calculate_next_pickup_target(pickup);
@@ -393,6 +399,21 @@ update_tail_graphic :: () {
 }
 
 kill :: () {
+
+    //Particles
+    forward_dir := normalize(direction);
+    perpendicular := rotate(forward_dir,TAU/4);
+
+    point := cycle_point2(snake.head);
+
+    a := (point - perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
+    b := (point + perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
+
+    eat_particle := get_available_particles_system(eat_particles_pool);
+    if eat_particle != null {
+        play_particle_system_random_between_two_point(eat_particle,a,b,forward_dir*2);
+    }
+
     is_alive = false;
     time_scale = 0;
     shake_camera(0.2,10);
@@ -404,7 +425,7 @@ cut_tail_at :: (index : int) {
     graphics.tail.count = index*2;
 }
 
-get_available_particles_system :: (particle_system_pool : [..]*ParticleSystem) -> *ParticleSystem{//Consider make this generic
+get_available_particles_system :: (particle_system_pool : [..]*Particles_Emitter) -> *Particles_Emitter{//Consider make this generic
     for particle : particle_system_pool {
         if !particle.is_active then
             return particle;
@@ -414,10 +435,26 @@ get_available_particles_system :: (particle_system_pool : [..]*ParticleSystem) -
 
 eat_pickup :: (pickup_index : int) {
 
+    pickup_point := pickups[pickup_index].point;
+
+    snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
+    snake.head = adjust_wraps(pickup_point,snake_head_wraps);
+
     //Particles
+    forward_dir := normalize(direction);
+    perpendicular := rotate(forward_dir,TAU/4);
+
+    a := (pickup_point - perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
+    b := (pickup_point + perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
+
     eat_particle := get_available_particles_system(eat_particles_pool);
-    if eat_particle != null then
-        play_particle_system_at(eat_particle,pickups[pickup_index].point);
+    if eat_particle != null {
+        play_particle_system_random_between_two_point(eat_particle,a,b,(-perpendicular+forward_dir*2));
+    }
+    eat_particle2 := get_available_particles_system(eat_particles_pool);
+    if eat_particle2 != null{
+        play_particle_system_random_between_two_point(eat_particle2,a,b,(perpendicular+forward_dir*2));
+    }
 
     found_place := false;
     for i : 0..tummy_bloats.count-1 {
@@ -440,11 +477,11 @@ eat_pickup :: (pickup_index : int) {
     }
 
     destroy_pickup_by_index(pickup_index);
-    create_new_pickup_at_random(get_random_pickup_type(),0.5*HEAD_SIZE);
+    generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
 
     calculate_next_pickup_target(*pickups[pickups.count-1]);
     shake_camera(0.2,1.5);
-    slow_time_for(0.3,0.25);
+    //slow_time_for(0.2,0.25);
 
     score += 100;
 }
@@ -462,7 +499,10 @@ restart_game :: () {
     is_alive = true;
 
     //Restart digestion
-    tail_points_to_add = 0;
+    for *digestion : digesting {
+        digestion.tail_points_to_add = 0;
+        digestion.tail_adding_counter = 0.0;
+    }
 
     //Restart tummy
     for i : 0..tummy_bloats.count-1 {
@@ -540,12 +580,11 @@ process_input :: () {
 }
 
 simulate :: () {
+    //Particles
+    update_particle_systems(u_dt);
+
     if !is_alive then
         return;
-
-
-    //Particles
-    update_particle_systems(dt);
 
     //Time slow
     if time_slow_counter > 0.0 {
@@ -598,15 +637,21 @@ simulate :: () {
 
     //@IMPORTANT: This needs a rework to account for multiple digestions
     //Consume queued tail grows
-    if tail_points_to_add > 0 {
-        if tail_adding_counter <= 0.0 {
-            /*for 0..tail_points_to_add-1 {
-            }*/
-            add_to_tail();
-            tail_points_to_add -= 1;
-            tail_adding_counter = TAIL_ADD_DELAY;
-        }else {
-            tail_adding_counter -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and down
+
+    for #v2 < *digestion, i : digesting {
+        if digestion.tail_points_to_add > 0 {
+            if digestion.tail_adding_counter <= 0.0 {
+                add_to_tail();
+                print("\nAdded tail");
+                digestion.tail_points_to_add -= 1;
+                digestion.tail_adding_counter = TAIL_ADD_DELAY;
+                if digestion.tail_points_to_add <= 0 {
+                    array_ordered_remove_by_index(*digesting,i);
+                    print("\nRemoved digestion");
+                }
+            }else {
+                digestion.tail_adding_counter -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and down
+            }
         }
     }
 
@@ -656,9 +701,10 @@ add_to_tail :: (pos : Vector2) {
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
 }
-add_to_tail_deferred :: () {
-    tail_points_to_add += 1;
-    tail_adding_counter = 1.0;
+add_to_tail_deferred :: (count : int) {
+    array_add(*digesting,.{count,0.75});
+    //tail_points_to_add += 1;
+    //tail_adding_counter = 1.0;
 }
 
 remove_from_tail :: (index : int) {
@@ -668,13 +714,13 @@ remove_from_tail :: (index : int) {
     array_ordered_remove_by_index(*graphics.tail,index*2);
 }
 
-create_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
+generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
     array_add(*pickups,.{point,radius,type,.{},0.0});
 }
 
-create_new_pickup_at_random :: (type : Pickup_Type, radius : float){
+generate_new_pickup_at_random :: (type : Pickup_Type, radius : float){
     random_pos := Vector2.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
-    create_new_pickup(type,random_pos,radius);
+    generate_new_pickup(type,random_pos,radius);
 }
 
 destroy_pickup_by_index :: (index : int) {
