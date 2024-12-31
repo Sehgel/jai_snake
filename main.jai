@@ -13,14 +13,14 @@ CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 PADDING :: 10.0;
 
 TAIL_POINTS_SKIPPED :: 20;
-TAIL_ADD_DELAY :: 0.1;
+TAIL_ADD_DELAY :: 0.05;
 DISTANCE_BETWEEN_TAIL_POINTS :: 2.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
 DIGEST_TIME :: 0.75;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
-PICKUP_RADIUS :: 3;
+PICKUP_RADIUS :: 5;
 WALL_SIZE :: 16;
 
 //CAMERA
@@ -120,6 +120,11 @@ score : u32;
 
 eat_particles_pool : [..]*Particles_Emitter;
 
+//Sounds
+crunch_sound : Sound_Data;
+fail_sound : Sound_Data;
+music : Sound_Data;
+
 main :: () {
     SDL_Init(SDL_INIT_VIDEO);
 
@@ -152,12 +157,12 @@ main :: () {
     print ("GL Vendor = %\n", to_string(glGetString(GL_VENDOR)));
     print ("GL Version = %\n", to_string(glGetString(GL_VERSION)));
 
-    init_game();
+    init();
     prepare_render();
 
     // Enable MSAA
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
     wglSwapIntervalEXT(1);
@@ -285,12 +290,50 @@ main :: () {
         */
         last_time = now;
         frame_counter+=1;
+
+        update();
     }
+    sound_player_shutdown();
+
     SDL_DestroyWindow(window);
     SDL_Quit();
 }
 
-init_game :: () {
+init :: () {
+
+    //Load sounds
+
+    crunch_sound = load_audio_file("sounds/crunch.wav");
+    if !crunch_sound.loaded {
+        print("\nCouldn't load audio file crunch");
+        exit(1);
+    }
+    fail_sound = load_audio_file("sounds/fail.ogg");
+    if !fail_sound.loaded {
+        print("\nCouldn't load audio file fail");
+        exit(1);
+    }
+
+    do_async_audio := (OS != .ANDROID);
+    success := sound_player_init(.{update_from_a_thread = do_async_audio});
+    assert(success);
+
+    //
+    // Create the music stream.
+    //
+    {
+        music = load_audio_file("sounds/bailout.ogg");
+
+        if !music.loaded {
+            print("Could not load theme music");
+            exit(1);
+        }
+
+        stream := make_stream(*music, .MUSIC);
+        set_repeating(stream, true);
+        stream.user_volume_scale *= 0.15;
+        start_playing(stream);
+    }
 
 
     test_point = CENTER_POINT;
@@ -400,6 +443,9 @@ update_tail_graphic :: () {
 
 kill :: () {
 
+    play_sound(*fail_sound);
+
+
     //Particles
     forward_dir := normalize(direction);
     perpendicular := rotate(forward_dir,TAU/4);
@@ -411,7 +457,7 @@ kill :: () {
 
     eat_particle := get_available_particles_system(eat_particles_pool);
     if eat_particle != null {
-        play_particle_system_random_between_two_point(eat_particle,a,b,forward_dir*2);
+        play_particle_system_random_between_two_point(eat_particle,a,b,forward_dir);
     }
 
     is_alive = false;
@@ -433,7 +479,16 @@ get_available_particles_system :: (particle_system_pool : [..]*Particles_Emitter
     return null;
 }
 
+play_sound :: (data: *Sound_Data) {
+    stream := make_stream(data);
+    //stream.user_volume_scale = random_get_within_range(0.5,  1);
+    stream.rate_scale        = random_get_within_range(0.75, 1.22);
+    start_playing(stream);
+}
+
 eat_pickup :: (pickup_index : int) {
+
+    play_sound(*crunch_sound);
 
     pickup_point := pickups[pickup_index].point;
 
@@ -460,7 +515,7 @@ eat_pickup :: (pickup_index : int) {
     for i : 0..tummy_bloats.count-1 {
         if length(tummy_bloats[i]) <= 0.0 {
             tummy_bloats[i] = snake.tail[0];
-            tummy_counters[i] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as down
+            tummy_counters[i] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as below
             found_place = true;
             break;
         }
@@ -472,8 +527,8 @@ eat_pickup :: (pickup_index : int) {
             tummy_counters[i] = tummy_counters[i+1];
         }
 
-        tummy_bloats[tummy_bloats.count-1] = snake.tail[5];//This 5 is the same as up
-        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as up
+        tummy_bloats[tummy_bloats.count-1] = snake.tail[5];//This 5 is the same as above
+        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as aboveo
     }
 
     destroy_pickup_by_index(pickup_index);
@@ -631,7 +686,9 @@ simulate :: () {
         }
         dir := normalize(pickup.target - pickup.point);
 
-        pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
+        pickup.point = move_towards(pickup.point,pickup.target,2000
+        *dt);
+        pickup.counter += dt;
         //pickup.point.x += dir.x*dt*100;
     }
 
@@ -641,16 +698,14 @@ simulate :: () {
     for #v2 < *digestion, i : digesting {
         if digestion.tail_points_to_add > 0 {
             if digestion.tail_adding_counter <= 0.0 {
-                add_to_tail();
-                print("\nAdded tail");
+                for 0..2 add_to_tail();
                 digestion.tail_points_to_add -= 1;
                 digestion.tail_adding_counter = TAIL_ADD_DELAY;
                 if digestion.tail_points_to_add <= 0 {
                     array_ordered_remove_by_index(*digesting,i);
-                    print("\nRemoved digestion");
                 }
             }else {
-                digestion.tail_adding_counter -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and down
+                digestion.tail_adding_counter -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and below
             }
         }
     }
@@ -660,7 +715,7 @@ simulate :: () {
         if !(tummy_counters[i] <= 0.0) {
             current_index : u32 = xx ((snake.tail.count-1)*(1.0-tummy_counters[i]));
             tummy_bloats[i] = *cycle_point2(snake.tail[current_index]);
-            tummy_counters[i] -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and up
+            tummy_counters[i] -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and above
         }else {
             tummy_bloats[i] = Vector2.{0.0,0.0};
         }
@@ -692,8 +747,6 @@ add_to_tail :: () {
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
-
-    //print("\nAdded: %",tail_points_to_add);//nocheckin
 }
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
@@ -749,8 +802,8 @@ prepare_render :: () {
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         nr_channels : s32;
 
@@ -879,6 +932,43 @@ render :: () {
     }
 
     //****************
+    //Drawing Pickups
+    //****************
+    pickup_rotation : Quaternion;
+    for pickup : pickups {
+        dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
+        pickup_model :=  translate(Matrix4_Identity,cycle_point3(pickup.point));
+
+        glBindVertexArray(head_VAO);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+
+        uv_offset : Vector2;
+        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+        if pickup.type == {
+            case .APPLE;
+                uv_offset = get_atlas_uv_offset(20);
+            case .RAT;
+                uv_offset = get_atlas_uv_offset(22);
+                angle := angle_between(.{0,-1}, normalize(pickup.target - pickup.point));
+                set_from_axis_and_angle(*pickup_rotation,.{0,0,1},xx angle);
+                pickup_model *= rotate(Matrix4_Identity,pickup_rotation);
+        }
+
+        pickup_model *= scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2.25);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *pickup_model);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
+        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+
+
+        glBindBuffer(GL_ARRAY_BUFFER,0);
+        glBindTexture(GL_TEXTURE_2D,0);
+    }
+
+    //****************
     //Drawing Obstacles
     //****************
     for obstacle : obstacles {
@@ -895,37 +985,6 @@ render :: () {
         uv_offset : Vector2;
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         uv_offset = get_atlas_uv_offset(30);
-        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
-        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
-
-
-        glBindBuffer(GL_ARRAY_BUFFER,0);
-        glBindTexture(GL_TEXTURE_2D,0);
-    }
-
-    //****************
-    //Drawing Pickups
-    //****************
-    for pickup : pickups {
-        dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
-        pickup_model :=  translate(Matrix4_Identity,floor_vector3(cycle_point3(pickup.point))) * scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2.25);
-
-        glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *pickup_model);
-        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
-        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
-        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
-
-        uv_offset : Vector2;
-        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
-        if pickup.type == {
-            case .APPLE;
-                uv_offset = get_atlas_uv_offset(20);
-            case .RAT;
-                uv_offset = get_atlas_uv_offset(21);
-        }
         glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
@@ -1169,7 +1228,7 @@ get_random_pickup_type :: () -> Pickup_Type{
 }
 
 calculate_next_pickup_target :: (pickup : *PickUp) {
-    pickup.target = .{random_get_within_range(0,WINDOW_WIDTH),pickup.point.y};
+    pickup.target = .{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
     pickup.counter = 0.0;
 }
 
@@ -1209,6 +1268,8 @@ slow_time_for :: (time : float, time_scale_start : float = 0.0) {
 #import "Random";
 Input :: #import "Input";
 #import "stb_image";
+#import "Sound_Player";
+
 #load "src/shader_program.jai";
 #load "src/physics.jai";
 #load "src/math.jai";

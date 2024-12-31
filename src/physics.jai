@@ -41,8 +41,13 @@ resolve_collisions :: () {
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
 
             radius := pickup.radius + HEAD_SIZE * scale;
-            if dist < radius then
+            if dist < radius then{
                 pickup.point = constraint_distance(pickup.point,cycle_point2(tail_point),radius);
+                if pickup.type == .RAT && pickup.counter > 0.15{
+                    pickup.target = pickup.point + rotate(normalize(pickup.point - pickup.target),random_get_within_range(-PI/4,PI/4)) * random_get_within_range(10,64);
+                    pickup.counter = 0.0;
+                }
+            }
         }
     }
 
