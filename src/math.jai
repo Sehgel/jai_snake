@@ -46,3 +46,9 @@ floor_vector2 :: (v : Vector2) -> Vector2 {
 floor_vector3 :: (v : Vector3) -> Vector3 {
     return .{floor(v.x),floor(v.y),floor(v.z)};
 }
+
+get_quaternion_from_axis_and_angle :: (axis : Vector3, angle : float) -> Quaternion {
+    q : Quaternion;
+    set_from_axis_and_angle(*q,axis,angle);
+    return q;
+}

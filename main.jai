@@ -20,7 +20,7 @@ DIGEST_TIME :: 0.75;
 
 PIXEL_SIZE :: 8;
 HEAD_SIZE :: 12;
-PICKUP_RADIUS :: 5;
+PICKUP_RADIUS :: 8;
 WALL_SIZE :: 16;
 
 //CAMERA
@@ -165,7 +165,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    wglSwapIntervalEXT(1);
+    if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -568,7 +568,7 @@ restart_game :: () {
 
 generate_base_tail :: () {
     for 0..50 {
-        add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS*2,0});
+        add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS,0});
     }
     prev_point := snake.head;
 

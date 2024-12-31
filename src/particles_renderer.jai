@@ -190,7 +190,7 @@ draw_particles_systems :: (view : *Matrix4, projection : *Matrix4) {
 		glBindTexture(GL_TEXTURE_2D, texture_data.id);
 		for particle : particle_system.particles {
 			glUniform4f(particles_tint_loc, particle.color.x,particle.color.y,particle.color.z,particle.color.w);
-			model := translate(Matrix4_Identity,particle_system.position + particle.position) * rotate(Matrix4_Identity,get_from_axis_and_angle(.{0,0,1},particle.rotation)) * scale(Matrix4_Identity,.{1,1,1}*particle.scale*8.0);
+			model := translate(Matrix4_Identity,particle_system.position + particle.position) * rotate(Matrix4_Identity,get_quaternion_from_axis_and_angle(.{0,0,1},particle.rotation)) * scale(Matrix4_Identity,.{1,1,1}*particle.scale*8.0);
 			glUniformMatrix4fv(particles_model_loc, 1, GL_TRUE, xx *model);
 
 			glDrawArrays(GL_TRIANGLES,0,partices_quad_vertices.count);
