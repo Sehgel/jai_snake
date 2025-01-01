@@ -163,7 +163,7 @@ update_particle_systems :: (dt : float) {
 
 		for *particle : particle_system.particles {
 			particle.position += particle.velocity*dt*100;
-			particle.velocity *= particle_system.drag*dt*75;
+			particle.velocity *= pow(particle_system.drag,dt*100);
 			particle.color.w = 1.0 - particle_system.counter;
 		}
 

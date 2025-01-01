@@ -610,7 +610,7 @@ process_input :: () {
     test_point.y += direction.y*speed*dt;
 
     if key_space{
-        for 0..10 add_to_tail();
+        for 0..5 add_to_tail();
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);

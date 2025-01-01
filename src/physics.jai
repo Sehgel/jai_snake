@@ -90,7 +90,7 @@ resolve_collisions :: () {
     }
 
     //Collision of the *TAIL* with *OBSTACLES*
-    {
+    if false {
         i := snake.tail.count-1;
         while i >= 0 {
             defer i -= 5;
