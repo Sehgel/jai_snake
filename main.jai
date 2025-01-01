@@ -165,7 +165,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    if OS == .WINDOWS wglSwapIntervalEXT(1);
+    //if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -321,7 +321,7 @@ init :: () {
     //
     // Create the music stream.
     //
-    {
+    if false {
         music = load_audio_file("sounds/bailout.ogg");
 
         if !music.loaded {
@@ -747,6 +747,8 @@ add_to_tail :: () {
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
+
+    print("\nTail count: %",snake.tail.count);
 }
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
