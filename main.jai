@@ -165,7 +165,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    //if OS == .WINDOWS wglSwapIntervalEXT(1);
+    if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -662,14 +662,15 @@ simulate :: () {
         //move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
         // * (cast(float)sin(last_time*15))*15*dt
         move_dir = direction;
-        move_dir += rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*15*dt;
+        move_dir += rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*0.125;
     }else{
+        print("\n%",sin(last_time*15));
         //strife := direction;
-        strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*15*dt;
+        strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*0.125;
         snake.head += strife * speed * dt;
 
         for *tail_point, i : snake.tail {
-            tail_strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15 - i*0.0075*HEAD_SIZE*2))*15*dt;
+            tail_strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15 - i*0.0075*HEAD_SIZE*2))*0.125;
             <<tail_point += tail_strife * speed * dt;
         }
     }

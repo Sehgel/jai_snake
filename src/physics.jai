@@ -118,7 +118,6 @@ check_circle_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -
 }
 
 constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
-    scale := length(point-anchor);
     return anchor + (normalize(point-anchor) * distance);
 }
 
