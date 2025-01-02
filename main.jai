@@ -659,13 +659,9 @@ simulate :: () {
     //Move head
     move_dir : Vector2;
     if is_started {
-        //move_dir += (rotate(direction,TAU/4) * (cast(float)sin(last_time*15))*15)*dt;
-        // * (cast(float)sin(last_time*15))*15*dt
         move_dir = direction;
         move_dir += rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*0.125;
     }else{
-        print("\n%",sin(last_time*15));
-        //strife := direction;
         strife := rotate(direction,TAU/4)*(cast(float)sin(last_time*15))*0.125;
         snake.head += strife * speed * dt;
 
@@ -783,7 +779,7 @@ generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
 }
 
 generate_new_pickup_at_random :: (type : Pickup_Type, radius : float){
-    random_pos := Vector2.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
+    random_pos := Vector2.{random_get_within_range(WALL_SIZE*2,WINDOW_WIDTH-WALL_SIZE*2),random_get_within_range(WALL_SIZE*2,WINDOW_HEIGHT-WALL_SIZE*2)};
 
     for obstacle : obstacles {
         random_pos = constraint_away_distance(random_pos,obstacle.point,PICKUP_RADIUS*6);
