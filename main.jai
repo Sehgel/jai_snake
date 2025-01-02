@@ -351,10 +351,11 @@ init :: () {
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
     //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
-    generate_walls();
     generate_map_details();
     generate_base_tail();
+
     is_alive = true;
+    generate_walls();
     for 0..2 {
         generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
     }
@@ -528,7 +529,7 @@ eat_pickup :: (pickup_index : int) {
         }
 
         tummy_bloats[tummy_bloats.count-1] = snake.tail[5];//This 5 is the same as above
-        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as aboveo
+        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as above
     }
 
     destroy_pickup_by_index(pickup_index);
@@ -545,7 +546,14 @@ restart_game :: () {
     score = 0;
     is_started = false;
     generate_walls();
-    generate_map_details();
+    pickups.count = 0;
+    for 0..2 {
+        generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
+    }
+    for *pickup : pickups {
+        calculate_next_pickup_target(pickup);
+    }
+    //generate_map_details();
     time_scale = 1.0;
     destroy_tail();
     snake.head = CENTER_POINT;
@@ -610,7 +618,8 @@ process_input :: () {
     test_point.y += direction.y*speed*dt;
 
     if key_space{
-        for 0..5 add_to_tail();
+        //for 0..5 add_to_tail();
+        generate_new_pickup_at_random(.APPLE,PICKUP_RADIUS);
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
@@ -686,8 +695,7 @@ simulate :: () {
         }
         dir := normalize(pickup.target - pickup.point);
 
-        pickup.point = move_towards(pickup.point,pickup.target,2000
-        *dt);
+        pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
         pickup.counter += dt;
         //pickup.point.x += dir.x*dt*100;
     }
@@ -775,6 +783,10 @@ generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
 
 generate_new_pickup_at_random :: (type : Pickup_Type, radius : float){
     random_pos := Vector2.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
+
+    for obstacle : obstacles {
+        random_pos = constraint_away_distance(random_pos,obstacle.point,PICKUP_RADIUS*6);
+    }
     generate_new_pickup(type,random_pos,radius);
 }
 

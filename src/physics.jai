@@ -90,16 +90,17 @@ resolve_collisions :: () {
     }
 
     //Collision of the *TAIL* with *OBSTACLES*
-    if false {
+    if true {
         i := snake.tail.count-1;
         while i >= 0 {
-            defer i -= 5;
+            defer i -= 2;
             tail_point := snake.tail[i];
         //for #v2 < *tail_point,i : snake.tail {//@NeedsOptimization
             tail_wraps := Vector2.{floor(tail_point.x/WINDOW_WIDTH),floor(tail_point.y/WINDOW_HEIGHT)};
             for *obstacle,j : obstacles {
                 adjusted_obstacle := adjust_wraps(obstacle.point,tail_wraps);
                 dist := distance(adjusted_obstacle,tail_point);
+                if dist > WALL_SIZE*2 continue;
                 scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
 
                 radius := obstacle.radius + HEAD_SIZE * scale;
@@ -116,14 +117,17 @@ check_circle_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -
     return distance(p0,p1) < (r0 +r1);
 }
 
-
 constraint_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
     scale := length(point-anchor);
     return anchor + (normalize(point-anchor) * distance);
 }
 
-
-
+constraint_away_distance :: (point : Vector2, anchor : Vector2, distance : float) -> Vector2 {
+    if check_circle_collision (point,distance/2,anchor,distance/2) {
+        return anchor + normalize(point-anchor) * distance;
+    }
+    return point;
+}
 
 check_point_aabb_collision :: (p0 : Vector2, p1 : Vector2, s1 : Vector2) -> bool {
     return (p0.x > p1.x - s1.x*0.5 && p0.x < p1.x + s1.x*0.5) &&
