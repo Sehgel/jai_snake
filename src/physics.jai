@@ -1,3 +1,51 @@
+collision_grid : [WINDOW_WIDTH / WALL_SIZE*2][WINDOW_HEIGHT / WALL_SIZE*2][..]Collider_Data;
+
+Collider_Type :: enum u32{
+    TAIL;
+    OBSTACLE;
+}
+
+Collider_Data :: struct {
+    point : Vector2;
+    radius : float;
+    type : Collider_Type;
+    index : int;
+}
+
+init_physics :: () {
+    width : s64 = xx (WINDOW_WIDTH / (WALL_SIZE*2));
+
+    print("width: %", collision_grid.count);
+    print("width: %", width);
+    for row : collision_grid {
+        for column : row {
+        }
+    }
+
+    for row : collision_grid {
+        for column : row {
+            print("\n%",column);
+        }
+    }
+}
+
+reset_collision_grid :: () {
+    for row, i : collision_grid {
+        for column, j : row {
+            collision_grid[i][j].count = 0;
+        }
+    }
+}
+
+update_collision_grid :: (point : Vector2, radius : float, type : Collider_Type, index : int) {
+    grid := point_to_grid(point);
+    array_add(*collision_grid[xx grid.x][xx grid.y],.{point,radius,type,index});
+}
+
+point_to_grid :: (point : Vector2) -> Vector2 {
+    return .{point.x / (WALL_SIZE*2), point.y / (WALL_SIZE*2)};
+}
+
 resolve_collisions :: () {
 
 	//@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
@@ -35,6 +83,44 @@ resolve_collisions :: () {
 
 
     //Collision of the *HEAD* with *PICKUPS*
+    /*
+    reset_collision_grid();
+
+    head_grid := point_to_grid(cycle_point2(snake.head));
+
+    for pickup,i : pickups {
+        update_collision_grid(cycle_point2(pickup.point),pickup.radius,i);
+    }
+
+    count : int = 0;
+    for i : xx head_grid.x-1..xx head_grid.x+1 {
+        if i < 0 || i >= collision_grid.count then continue;
+        for j : xx head_grid.y-1..xx head_grid.y+1 {
+            if j < 0 || j >= collision_grid[i].count then continue;
+
+            colliders := collision_grid[i][j];
+            for collider : colliders {
+                count += 1;
+                if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(collider.point),collider.radius) {
+                    add_to_tail_deferred(8);
+                    eat_pickup(collider.index);
+                    print("\neat!");
+                }
+            }
+            print("\nchecked: % times at: %", count,frame_counter);
+        }
+    }
+
+    if key_debug.was_just_pressed {
+        print("\nChecked % times",count);
+        for row : collision_grid {
+            for column : row {
+                if column.count > 0 then
+                    print("\n%",column);
+            }
+        }
+    }
+    */
     for #v2 < pickup,i : pickups {
         if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(pickup.point),pickup.radius) {
             add_to_tail_deferred(8);
@@ -90,10 +176,76 @@ resolve_collisions :: () {
     }
 
     //Collision of the *TAIL* with *OBSTACLES*
-    if true {
+
+    reset_collision_grid();
+
+
+    for tail,i : snake.tail {
+        scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
+        update_collision_grid(cycle_point2(tail),HEAD_SIZE*scale,Collider_Type.TAIL,i);
+    }
+
+    /*for obstacle,i : obstacles {
+        //adjusted_obstacle := adjust_wraps(obstacle.point,tail_wraps);
+        update_collision_grid(obstacle.point,WALL_SIZE*1.5,Collider_Type.OBSTACLE,i);
+    }*/
+
+    count : int = 0;
+    for obstacle,i : obstacles {
+        obstacle_grid := point_to_grid(cycle_point2(obstacle.point));
+        scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
+
+        for i : xx obstacle_grid.x-1..xx obstacle_grid.x+1 {
+            if i < 0 || i >= collision_grid.count then continue;
+            for j : xx obstacle_grid.y-1..xx obstacle_grid.y+1 {
+                if j < 0 || j >= collision_grid[i].count then continue;
+
+                colliders := collision_grid[i][j];
+                //print("\n%",colliders);
+                for collider : colliders {
+                    if collider.type != Collider_Type.TAIL then continue;
+
+
+
+                    dist := distance(collider.point,obstacle.point);
+                    if dist > WALL_SIZE*2 continue;
+
+
+                    result, pos, dir := constraint_circle_aabb_collision(collider.point,collider.radius,obstacle.point,Vector2.{1,1}*WALL_SIZE*1.5);
+
+                    if result snake.tail[collider.index] = pos;
+                }
+
+            /*
+            colliders := collision_grid[i][j];
+            for collider : colliders {
+                count += 1;
+                if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(collider.point),collider.radius) {
+                    add_to_tail_deferred(8);
+                    eat_pickup(collider.index);
+                    print("\neat!");
+                }
+            }
+            */
+            }
+        }
+    }
+
+    if key_debug.was_just_pressed {
+        print("\ngrid: %", collision_grid);
+        /*
+        print("\nChecked2 % times",count);
+        for row : collision_grid {
+            for column : row {
+                if column.count > 0 then
+                    print("\n%",column);
+            }
+        }*/
+    }
+    /*if true {
         i := snake.tail.count-1;
         while i >= 0 {
-            defer i -= 2;
+            defer i -= 1;
             tail_point := snake.tail[i];
         //for #v2 < *tail_point,i : snake.tail {//@NeedsOptimization
             tail_wraps := Vector2.{floor(tail_point.x/WINDOW_WIDTH),floor(tail_point.y/WINDOW_HEIGHT)};
@@ -111,6 +263,7 @@ resolve_collisions :: () {
             }
         }
     }
+    */
 }
 
 check_circle_collision :: (p0 : Vector2, r0 : float, p1 : Vector2, r1 : float) -> bool {

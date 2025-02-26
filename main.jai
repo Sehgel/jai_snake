@@ -46,6 +46,7 @@ key_debug_draw : KeyState;
 key_slow_mo : KeyState;
 key_restart : KeyState;
 key_pause : KeyState;
+key_debug : KeyState;
 
 snake : Snake;
 tummy_bloats : [10]Vector2;
@@ -165,7 +166,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    if OS == .WINDOWS wglSwapIntervalEXT(1);
+    //if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -176,6 +177,7 @@ main :: () {
         event : SDL_Event;
 
         if key_slow_mo.awaits_reset then key_slow_mo.was_just_pressed = false;
+        if key_debug.awaits_reset then key_debug.was_just_pressed = false;
         if key_debug_draw.awaits_reset then key_debug_draw.was_just_pressed = false;
         if key_restart.awaits_reset then key_restart.was_just_pressed = false;
         if key_pause.awaits_reset then key_pause.was_just_pressed = false;
@@ -240,6 +242,13 @@ main :: () {
                             key_pause.was_just_pressed = true;
                         }
                     }
+                    if event.key.keysym.sym == #char "d"{
+                        key_debug.is_pressed = true;
+                        if !key_debug.awaits_reset {
+                            key_debug.awaits_reset = true;
+                            key_debug.was_just_pressed = true;
+                        }
+                    }
                 case SDL_KEYUP;
                     if event.key.keysym.sym == SDLK_ESCAPE quit       = true;
 
@@ -266,6 +275,7 @@ main :: () {
                     if event.key.keysym.sym == #char "r" key_restart = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
                     if event.key.keysym.sym == #char "u" key_restart = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
                     if event.key.keysym.sym == #char "p" key_pause = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
+                    if event.key.keysym.sym == #char "d" key_debug = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
             }
         }
@@ -338,7 +348,7 @@ init :: () {
 
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
-
+    init_physics();
     init_text_renderer();
 
     init_particles_renderer();
@@ -618,8 +628,8 @@ process_input :: () {
     test_point.y += direction.y*speed*dt;
 
     if key_space{
-        //for 0..5 add_to_tail();
-        generate_new_pickup_at_random(.APPLE,PICKUP_RADIUS);
+        for 0..5 add_to_tail();
+        //calculate_next_pickup_target(generate_new_pickup_at_random(.RAT,PICKUP_RADIUS));
     }
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
@@ -683,18 +693,22 @@ simulate :: () {
 
     //Move rats
     for *pickup : pickups {
-        if pickup.type != .RAT then
-            continue;
-        dist := distance(pickup.target,pickup.point);
-        if dist < 0.01 {
-            calculate_next_pickup_target(pickup);
-            continue;
-        }
-        dir := normalize(pickup.target - pickup.point);
+        if pickup.type == .RAT {
+            dist := distance(pickup.target,pickup.point);
+            if dist < 0.01 {
+                calculate_next_pickup_target(pickup);
+                continue;
+            }
+            dir := normalize(pickup.target - pickup.point);
 
-        pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
-        pickup.counter += dt;
-        //pickup.point.x += dir.x*dt*100;
+            pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
+            pickup.counter += dt;
+            //pickup.point.x += dir.x*dt*100;
+        }
+        else if pickup.type == .FROG {
+            pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
+            pickup.counter += dt;
+        }
     }
 
     //@IMPORTANT: This needs a rework to account for multiple digestions
@@ -753,14 +767,16 @@ add_to_tail :: () {
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 
-    print("\nTail count: %",snake.tail.count);
+    print("\nTail count: %", snake.tail.count);
+
 }
+
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
-
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
 }
+
 add_to_tail_deferred :: (count : int) {
     array_add(*digesting,.{count,0.75});
     //tail_points_to_add += 1;
@@ -769,22 +785,48 @@ add_to_tail_deferred :: (count : int) {
 
 remove_from_tail :: (index : int) {
     array_ordered_remove_by_index(*snake.tail,index);
-
     array_ordered_remove_by_index(*graphics.tail,(index*2)+1);
     array_ordered_remove_by_index(*graphics.tail,index*2);
 }
 
-generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) {
+generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) -> *PickUp {
     array_add(*pickups,.{point,radius,type,.{},0.0});
+    return *pickups[pickups.count-1];
 }
 
-generate_new_pickup_at_random :: (type : Pickup_Type, radius : float){
+generate_new_pickup_at_random :: (type : Pickup_Type, radius : float) -> *PickUp {
     random_pos := Vector2.{random_get_within_range(WALL_SIZE*2,WINDOW_WIDTH-WALL_SIZE*2),random_get_within_range(WALL_SIZE*2,WINDOW_HEIGHT-WALL_SIZE*2)};
 
-    for obstacle : obstacles {
-        random_pos = constraint_away_distance(random_pos,obstacle.point,PICKUP_RADIUS*6);
+    if type == {
+        case .APPLE;
+            for obstacle : obstacles {
+                random_pos = constraint_away_distance(random_pos,obstacle.point,PICKUP_RADIUS*6);
+            }
+        case .RAT;
+            random_pos = limit_point_to_outside_viewport(random_pos);
     }
-    generate_new_pickup(type,random_pos,radius);
+    return generate_new_pickup(type,random_pos,radius);
+}
+
+limit_point_to_outside_viewport :: (v : Vector2) -> Vector2 {
+    point := v;
+    x := min(abs(0 - point.x),abs(WINDOW_WIDTH - point.x));
+    y := min(abs(0 - point.y),abs(WINDOW_HEIGHT - point.y));
+
+    if y < x {
+        if abs(0 - point.y) < abs(WINDOW_HEIGHT - point.y){
+            point.y = -WALL_SIZE;
+        }else{
+            point.y = WINDOW_HEIGHT+WALL_SIZE;
+        }
+    } else {
+        if abs(0 - point.x) < abs(WINDOW_WIDTH - point.x){
+            point.x = -WALL_SIZE;
+        }else{
+            point.x = WINDOW_WIDTH+WALL_SIZE;
+        }
+    }
+    return point;
 }
 
 destroy_pickup_by_index :: (index : int) {
@@ -948,7 +990,7 @@ render :: () {
     pickup_rotation : Quaternion;
     for pickup : pickups {
         dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
-        pickup_model :=  translate(Matrix4_Identity,cycle_point3(pickup.point));
+        pickup_model :=  translate(Matrix4_Identity,.{pickup.point.x,pickup.point.y,0});
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
@@ -967,6 +1009,8 @@ render :: () {
                 angle := angle_between(.{0,-1}, normalize(pickup.target - pickup.point));
                 set_from_axis_and_angle(*pickup_rotation,.{0,0,1},xx angle);
                 pickup_model *= rotate(Matrix4_Identity,pickup_rotation);
+            case .FROG;
+                uv_offset = get_atlas_uv_offset(23);
         }
 
         pickup_model *= scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2.25);
@@ -1220,6 +1264,7 @@ Pickup_Type :: enum u32 {
     START;
     APPLE;
     RAT;
+    FROG;
     END;
 }
 
@@ -1239,8 +1284,14 @@ get_random_pickup_type :: () -> Pickup_Type{
 }
 
 calculate_next_pickup_target :: (pickup : *PickUp) {
-    pickup.target = .{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
-    pickup.counter = 0.0;
+    if pickup.type == .RAT {
+        random_pos := Vector2.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
+        random_pos = limit_point_to_outside_viewport(random_pos);
+        pickup.target = random_pos;
+        pickup.counter = 0.0;
+    }else if pickup.type == .FROG {
+
+    }
 }
 
 is_pickup_nearby :: (point : Vector2, radius : float) -> bool {
