@@ -1,4 +1,8 @@
-collision_grid : [WINDOW_WIDTH / WALL_SIZE*2][WINDOW_HEIGHT / WALL_SIZE*2][..]Collider_Data;
+WALL_STEP :: WALL_SIZE;
+WIDTH_STEP :: WINDOW_WIDTH / WALL_STEP;
+HEIGHT_STEP :: WINDOW_HEIGHT / WALL_STEP;
+
+collision_grid : [WIDTH_STEP][HEIGHT_STEP][..]Collider_Data;
 
 Collider_Type :: enum u32{
     TAIL;
@@ -13,7 +17,7 @@ Collider_Data :: struct {
 }
 
 init_physics :: () {
-    width : s64 = xx (WINDOW_WIDTH / (WALL_SIZE*2));
+    width : s64 = xx WIDTH_STEP;
 
     print("width: %", collision_grid.count);
     print("width: %", width);
@@ -43,7 +47,7 @@ update_collision_grid :: (point : Vector2, radius : float, type : Collider_Type,
 }
 
 point_to_grid :: (point : Vector2) -> Vector2 {
-    return .{point.x / (WALL_SIZE*2), point.y / (WALL_SIZE*2)};
+    return .{point.x / WALL_STEP, point.y / WALL_STEP};
 }
 
 resolve_collisions :: () {
@@ -51,10 +55,17 @@ resolve_collisions :: () {
     //Update collision grid:
     reset_collision_grid();
     //insert tail parts into the collision grid
-    for tail_point,i : snake.tail {
+
+    i : int = 0;
+    while i < snake.tail.count {
+        scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
+        update_collision_grid(snake.tail[i],HEAD_SIZE*scale,Collider_Type.TAIL,i);
+        i+=5;
+    }
+    /*for tail_point,i : snake.tail {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
         update_collision_grid(tail_point,HEAD_SIZE*scale,Collider_Type.TAIL,i);
-    }
+    }*/
 
 	//@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
 
