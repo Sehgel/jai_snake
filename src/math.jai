@@ -52,3 +52,8 @@ get_quaternion_from_axis_and_angle :: (axis : Vector3, angle : float) -> Quatern
     set_from_axis_and_angle(*q,axis,angle);
     return q;
 }
+
+ease_out_elastic :: (x : float) -> float {
+    C4 :: (2.0 * PI) / 3.0;
+    return pow(2.0, -10.0 * x) * sin((x * 10.0 - 0.75) * C4) + 1.0;
+}

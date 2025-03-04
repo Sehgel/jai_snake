@@ -691,7 +691,7 @@ simulate :: () {
         }
     }
 
-    //Move rats
+    //Update pickups
     for *pickup : pickups {
         if pickup.type == .RAT {
             dist := distance(pickup.target,pickup.point);
@@ -702,13 +702,12 @@ simulate :: () {
             dir := normalize(pickup.target - pickup.point);
 
             pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
-            pickup.counter += dt;
-            //pickup.point.x += dir.x*dt*100;
         }
-        else if pickup.type == .FROG {
+        else if pickup.type == .FROG && pickup.spawn_counter >= 0.35 {
             pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
-            pickup.counter += dt;
         }
+        pickup.counter += dt;
+        pickup.spawn_counter += dt;
     }
 
     //@IMPORTANT: This needs a rework to account for multiple digestions
@@ -790,7 +789,7 @@ remove_from_tail :: (index : int) {
 }
 
 generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) -> *PickUp {
-    array_add(*pickups,.{point,radius,type,.{},0.0});
+    array_add(*pickups,.{point = point,radius = radius,type = type,target = .{},counter = 0.0});
     return *pickups[pickups.count-1];
 }
 
@@ -990,7 +989,7 @@ render :: () {
     pickup_rotation : Quaternion;
     for pickup : pickups {
         dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
-        pickup_model :=  translate(Matrix4_Identity,.{pickup.point.x,pickup.point.y,0});
+        pickup_model :=  translate(Matrix4_Identity,.{pickup.point.x,pickup.point.y,0}) * scale(Matrix4_Identity,.{1,1,1}*ease_out_elastic(min(pickup.spawn_counter/1.0,1.0)));
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
@@ -1248,6 +1247,7 @@ PickUp :: struct {
 
     target : Vector2;
     counter : float;
+    spawn_counter : float;
 }
 
 Obstacle :: struct {
