@@ -4,15 +4,9 @@ HEIGHT_STEP :: WINDOW_HEIGHT / WALL_STEP;
 
 collision_grid : [WIDTH_STEP][HEIGHT_STEP][..]Collider_Data;
 
-Collider_Type :: enum u32{
-    TAIL;
-    OBSTACLE;
-}
-
 Collider_Data :: struct {
     point : Vector2;
     radius : float;
-    type : Collider_Type;
     index : int;
 }
 
@@ -41,9 +35,9 @@ reset_collision_grid :: () {
     }
 }
 
-update_collision_grid :: (point : Vector2, radius : float, type : Collider_Type, index : int) {
+update_collision_grid :: (point : Vector2, radius : float, index : int) {
     grid := point_to_grid(cycle_point2(point));
-    array_add(*collision_grid[xx grid.x][xx grid.y],.{point,radius,type,index});
+    array_add(*collision_grid[xx grid.x][xx grid.y],.{point,radius,index});
 }
 
 point_to_grid :: (point : Vector2) -> Vector2 {
@@ -54,18 +48,14 @@ resolve_collisions :: () {
 
     //Update collision grid:
     reset_collision_grid();
-    //insert tail parts into the collision grid
 
+    //insert tail parts into the collision grid
     i : int = 0;
     while i < snake.tail.count {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
-        update_collision_grid(snake.tail[i],HEAD_SIZE*scale,Collider_Type.TAIL,i);
+        update_collision_grid(snake.tail[i],HEAD_SIZE*scale,i);
         i+=5;
     }
-    /*for tail_point,i : snake.tail {
-        scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
-        update_collision_grid(tail_point,HEAD_SIZE*scale,Collider_Type.TAIL,i);
-    }*/
 
 	//@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
 
@@ -181,7 +171,7 @@ resolve_collisions :: () {
                     for collider : colliders {
                         tail_wraps := Vector2.{floor(collider.point.x/WINDOW_WIDTH),floor(collider.point.y/WINDOW_HEIGHT)};
                         adjusted_obstacle := adjust_wraps(obstacle.point,tail_wraps);
-                        if collider.type != Collider_Type.TAIL then continue;
+                        //if collider.type != Collider_Type.TAIL then continue;
 
                         dist := distance(collider.point,adjusted_obstacle);
                         if dist > WALL_SIZE*2 then continue;

@@ -504,7 +504,7 @@ eat_pickup :: (pickup_index : int) {
     pickup_point := pickups[pickup_index].point;
 
     snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
-    snake.head = adjust_wraps(pickup_point,snake_head_wraps);
+    snake.head = adjust_wraps(cycle_point2(pickup_point),snake_head_wraps);
 
     //Particles
     forward_dir := normalize(direction);
