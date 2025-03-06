@@ -54,7 +54,7 @@ resolve_collisions :: () {
     while i < snake.tail.count {
         scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
         update_collision_grid(snake.tail[i],HEAD_SIZE*scale,i);
-        i+=5;
+        i+=1;
     }
 
 	//@IMPORTANT: All collisions wraps the snake tail and head back to the original viewport
@@ -84,8 +84,6 @@ resolve_collisions :: () {
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
             if check_circle_collision(cycle_point2(snake.head),HEAD_SIZE,cycle_point2(snake.tail[i]),HEAD_SIZE*scale) {
                 kill();
-                print("\n%",i);
-                return;
             }
         }
     }

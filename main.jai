@@ -49,7 +49,7 @@ key_pause : KeyState;
 key_debug : KeyState;
 
 snake : Snake;
-tummy_bloats : [10]Vector2;
+tummy_bloats : [10]Vector3;
 tummy_counters : [10]float;
 pickups : [..]PickUp;
 obstacles : [..]Obstacle;
@@ -345,7 +345,6 @@ init :: () {
         start_playing(stream);
     }
 
-
     test_point = CENTER_POINT;
     snake.head = CENTER_POINT;
     init_physics();
@@ -453,6 +452,7 @@ update_tail_graphic :: () {
 }
 
 kill :: () {
+    return;//nocheckin
 
     play_sound(*fail_sound);
 
@@ -525,7 +525,7 @@ eat_pickup :: (pickup_index : int) {
     found_place := false;
     for i : 0..tummy_bloats.count-1 {
         if length(tummy_bloats[i]) <= 0.0 {
-            tummy_bloats[i] = snake.tail[0];
+            tummy_bloats[i] = .{snake.tail[0].x,snake.tail[0].y,0.0};
             tummy_counters[i] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as below
             found_place = true;
             break;
@@ -538,7 +538,7 @@ eat_pickup :: (pickup_index : int) {
             tummy_counters[i] = tummy_counters[i+1];
         }
 
-        tummy_bloats[tummy_bloats.count-1] = snake.tail[5];//This 5 is the same as above
+        tummy_bloats[tummy_bloats.count-1] = .{snake.tail[5].x,snake.tail[5].y,0.0};//This 5 is the same as above
         tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as above
     }
 
@@ -557,7 +557,7 @@ restart_game :: () {
     is_started = false;
     generate_walls();
     pickups.count = 0;
-    for 0..2 {
+    for 0..35 {//nocheckin should loop:  0..2
         generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
     }
     for *pickup : pickups {
@@ -579,7 +579,7 @@ restart_game :: () {
 
     //Restart tummy
     for i : 0..tummy_bloats.count-1 {
-        tummy_bloats[i] = .{0.0,0.0};
+        tummy_bloats[i] = .{0.0,0.0,0.0};
         tummy_counters[i] = 0.0;
     }
 }
@@ -732,10 +732,11 @@ simulate :: () {
     for i : 0..tummy_bloats.count-1{
         if !(tummy_counters[i] <= 0.0) {
             current_index : u32 = xx ((snake.tail.count-1)*(1.0-tummy_counters[i]));
-            tummy_bloats[i] = *cycle_point2(snake.tail[current_index]);
+            cycled_point := cycle_point2(snake.tail[current_index]);
+            tummy_bloats[i] = .{cycled_point.x,cycled_point.y,tummy_counters[i]};
             tummy_counters[i] -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and above
         }else {
-            tummy_bloats[i] = Vector2.{0.0,0.0};
+            tummy_bloats[i] = .{0.0,0.0,0.0};
         }
     }
 
@@ -1118,7 +1119,7 @@ render :: () {
         glUniformMatrix4fv(tail_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(tail_projection_location, 1, GL_TRUE, xx *projection);
         glUniform3f(tail_tint_location, 1,1,1);
-        glUniform2fv(tail_tummy_bloats_location,xx tummy_bloats.count,xx *tummy_bloats);
+        glUniform3fv(tail_tummy_bloats_location,xx tummy_bloats.count,xx *tummy_bloats);
         uv_offset := get_atlas_uv_offset(10);
         glUniform2f(tail_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glUniform2f(tail_uv_offset_location,uv_offset.x,uv_offset.y);
