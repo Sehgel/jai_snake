@@ -311,6 +311,11 @@ main :: () {
 
 init :: () {
 
+    //TODO: make update_tail_graphic threaded
+    /*thread : Thread;
+    thread_init(*thread,update_tail_graphic);
+    thread_start(*thread);*/
+
     //Load sounds
 
     crunch_sound = load_audio_file("sounds/crunch.wav");
@@ -419,36 +424,41 @@ generate_walls :: () {
 }
 
 update_tail_graphic :: () {
-    //print("\nCuts: %, Count: %",graphics.tail_cuts,graphics.tail_cuts.count);
-    prev := snake.head;
-    last_pc := cycle_point2(snake.head);
-    graphics.tail_cuts.count = 0;
-    for i : 0..snake.tail.count-1 {
-        dir_to_last := normalize(prev - snake.tail[i]);
+    //while true {
+        prev := snake.head;
+        last_pc := cycle_point2(snake.head);
+        graphics.tail_cuts.count = 0;
 
-        scale : float = 1.0 - (cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
+        for i : 0..snake.tail.count-1 {
+            dir_to_last := normalize(prev - snake.tail[i]);
 
-        pc := cycle_point2(prev);
+            scale : float = 1.0 - (cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
 
-        p0 := pc + rotate(dir_to_last,TAU/4.0)*scale*HEAD_SIZE;
-        p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
+            pc := cycle_point2(prev);
+
+            p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
+            p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
 
 
-        if distance(last_pc,pc) >= 10 {
-            array_add(*graphics.tail_cuts,xx ((i)*2));
+            if distance(last_pc,pc) >= 10 {
+                //array_add(*graphics.tail_cuts,xx ((i)*2));
+                cut := (graphics.tail.count-1) - (i*2) + 1;
+                array_add(*graphics.tail_cuts,xx cut);
+            }
+
+            tail_repeat_factor := 2.0;
+            uv_y := cast(float)(i/tail_repeat_factor) / (snake.tail.count/tail_repeat_factor-1);
+
+            tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
+
+            graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage};
+            graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage};
+
+            prev = snake.tail[i];
+            last_pc = pc;
         }
-
-        tail_repeat_factor := 2.0;
-        uv_y := cast(float)(i/tail_repeat_factor) / (snake.tail.count/tail_repeat_factor-1);
-
-        tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
-
-        graphics.tail[i*2] =     .{p0.x,p0.y,0.0,uv_y,tail_percentage};
-        graphics.tail[(i*2)+1] = .{p1.x,p1.y,1.0,uv_y,tail_percentage};
-
-        prev = snake.tail[i];
-        last_pc = pc;
-    }
+    //}
+    //return 0;
 }
 
 kill :: () {
@@ -768,6 +778,7 @@ add_to_tail :: () {
     glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 
     print("\nTail count: %", snake.tail.count);
+    print("\nGraphic count: %", graphics.tail.count);
 
 }
 
@@ -1128,7 +1139,7 @@ render :: () {
         glBufferSubData(GL_ARRAY_BUFFER,0,5*graphics.tail.count*size_of(float),graphics.tail.data);
 
         start : s32 = 0;
-        for cut : graphics.tail_cuts {
+        for #v2 < cut : graphics.tail_cuts {
             glDrawArrays(GL_TRIANGLE_STRIP,start,xx (cut-start));
             start = cut;
         }
@@ -1332,6 +1343,7 @@ slow_time_for :: (time : float, time_scale_start : float = 0.0) {
 Input :: #import "Input";
 #import "stb_image";
 #import "Sound_Player";
+#import "Thread";
 
 #load "src/shader_program.jai";
 #load "src/physics.jai";

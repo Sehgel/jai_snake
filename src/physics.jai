@@ -1,4 +1,4 @@
-WALL_STEP :: WALL_SIZE;
+WALL_STEP :: WALL_SIZE*2;
 WIDTH_STEP :: WINDOW_WIDTH / WALL_STEP;
 HEIGHT_STEP :: WINDOW_HEIGHT / WALL_STEP;
 
@@ -11,20 +11,9 @@ Collider_Data :: struct {
 }
 
 init_physics :: () {
-    width : s64 = xx WIDTH_STEP;
-
-    print("width: %", collision_grid.count);
-    print("width: %", width);
-    for row : collision_grid {
-        for column : row {
-        }
-    }
-
-    for row : collision_grid {
-        for column : row {
-            print("\n%",column);
-        }
-    }
+    print("\nCount: %", collision_grid.count * collision_grid[0].count);
+    print("\nWidth: %", WIDTH_STEP);
+    print("\nHeight: %", HEIGHT_STEP);
 }
 
 reset_collision_grid :: () {
@@ -45,7 +34,6 @@ point_to_grid :: (point : Vector2) -> Vector2 {
 }
 
 resolve_collisions :: () {
-
     //Update collision grid:
     reset_collision_grid();
 
