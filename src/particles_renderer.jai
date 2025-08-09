@@ -125,7 +125,6 @@ play_particle_system_at_point :: (particle_system : *Particles_Emitter, pos : Ve
 }
 
 play_particle_system_random_between_two_point :: (particle_system : *Particles_Emitter, a : Vector2, b : Vector2, velocity_addition : Vector2) {
-
 	middle_point := (a + b)/2;
 	direction := (b - a);
 
@@ -182,7 +181,6 @@ draw_particles_systems :: (view : *Matrix4, projection : *Matrix4) {
 
 	glUniformMatrix4fv(particles_view_loc, 1, GL_TRUE, xx view);
     glUniformMatrix4fv(particles_projection_loc, 1, GL_TRUE, xx projection);
-
 	for particle_system : particle_systems {
 		if !particle_system.is_active then
 				continue;

@@ -2,6 +2,7 @@
 layout (location = 0) in vec2 in_pos;
 layout (location = 1) in vec2 in_uv;
 layout (location = 2) in float tail_percentage;
+layout (location = 3) in float tail_size;//TODO: Remove this
 
 out vec2 uv;
 

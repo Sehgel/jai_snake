@@ -14,7 +14,7 @@ PADDING :: 10.0;
 
 TAIL_POINTS_SKIPPED :: 20;
 TAIL_ADD_DELAY :: 0.05;
-DISTANCE_BETWEEN_TAIL_POINTS :: 2.0;
+DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
 DIGEST_TIME :: 0.75;
 
@@ -41,6 +41,7 @@ key_right : bool;
 key_up    : bool;
 key_down  : bool;
 key_space : bool;
+key_y : bool;
 
 key_debug_draw : KeyState;
 key_slow_mo : KeyState;
@@ -120,6 +121,8 @@ camera_pos : Vector2;
 score : u32;
 
 eat_particles_pool : [..]*Particles_Emitter;
+dust_particle_left : *Particles_Emitter;
+dust_particle_right : *Particles_Emitter;
 
 //Sounds
 crunch_sound : Sound_Data;
@@ -207,6 +210,7 @@ main :: () {
 
 
                     if event.key.keysym.sym == SDLK_SPACE key_space   = true;
+                    if event.key.keysym.sym == #char "y" key_y  = true;
                     if event.key.keysym.sym == SDLK_RETURN{
                         key_slow_mo.is_pressed = true;
                         if !key_slow_mo.awaits_reset {
@@ -268,6 +272,7 @@ main :: () {
                     if event.key.keysym.sym == #char "j" key_left       = false;//Beakl43 support
                     if event.key.keysym.sym == #char "a" key_left       = false;
 
+                    if event.key.keysym.sym == #char "y" key_y        = false;
                     if event.key.keysym.sym == SDLK_SPACE key_space   = false;
                     if event.key.keysym.sym == SDLK_RETURN key_slow_mo = .{was_just_pressed = false, is_pressed = false,awaits_reset=false};
 
@@ -357,10 +362,14 @@ init :: () {
 
     init_particles_renderer();
     generate_particles_texture(0,"sprites/blood.png");
+    generate_particles_texture(1,"sprites/dust.png");
 
     for 0..5 {
         array_add(*eat_particles_pool,generate_particles_system(0,12));
     }
+
+    dust_particle_left = generate_particles_system(1,6);
+    dust_particle_right = generate_particles_system(1,6);
 
     //sarray_reserve(*snake.tail,500);//Should I be doing this? Not sure.
     //print("\ncount: %, allocated: %",snake.tail_graphic.count,snake.tail_graphic.allocated);
@@ -424,7 +433,6 @@ generate_walls :: () {
 }
 
 update_tail_graphic :: () {
-    //while true {
         prev := snake.head;
         last_pc := cycle_point2(snake.head);
         graphics.tail_cuts.count = 0;
@@ -432,7 +440,9 @@ update_tail_graphic :: () {
         for i : 0..snake.tail.count-1 {
             dir_to_last := normalize(prev - snake.tail[i]);
 
-            scale : float = 1.0 - (cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
+            tail_epsilon := cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1);
+            distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
+            scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;
 
             pc := cycle_point2(prev);
 
@@ -451,18 +461,16 @@ update_tail_graphic :: () {
 
             tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
 
-            graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage};
-            graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage};
+            graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
+            graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
+
 
             prev = snake.tail[i];
             last_pc = pc;
         }
-    //}
-    //return 0;
 }
 
 kill :: () {
-    return;//nocheckin
 
     play_sound(*fail_sound);
 
@@ -485,6 +493,20 @@ kill :: () {
     time_scale = 0;
     shake_camera(0.2,10);
     print("\n[%]You lost!",frame_counter);//nocheckin
+}
+
+jump :: () {
+    snake.jump_counter = 0.375;
+    snake.raised_epsilon = 0.0;
+    forward_dir := normalize(direction);
+    perpendicular := rotate(forward_dir,TAU/4);
+    point := cycle_point2(snake.head);
+    a := (point - perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
+    b := (point + perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
+
+
+    play_particle_system_random_between_two_point(dust_particle_left,a,b,(-perpendicular+forward_dir*-1));
+    play_particle_system_random_between_two_point(dust_particle_right,a,b,(perpendicular+forward_dir*-1));
 }
 
 cut_tail_at :: (index : int) {
@@ -595,7 +617,7 @@ restart_game :: () {
 }
 
 generate_base_tail :: () {
-    for 0..50 {
+    for 0..25 {
         add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS,0});
     }
     prev_point := snake.head;
@@ -632,12 +654,17 @@ process_input :: () {
         direction = normalize(lerp(direction,normalize(input),dt*10));
         is_started = true;
     }
+
+    if key_space && snake.jump_counter <= 0.0 {
+        jump();
+    }
+    snake.jump_counter = max(0.0,snake.jump_counter-dt);
     //direction = (inputv2);
     //Debug
     test_point.x += direction.x*speed*dt;
     test_point.y += direction.y*speed*dt;
 
-    if key_space{
+    if key_y{
         for 0..5 add_to_tail();
         //calculate_next_pickup_target(generate_new_pickup_at_random(.RAT,PICKUP_RADIUS));
     }
@@ -692,11 +719,24 @@ simulate :: () {
     }
     snake.head += move_dir * speed * dt;
 
+    //Head height
+    if snake.jump_counter > 0.0 {
+        snake.height += dt*2;
+    }
+
+    if snake.height > 0.0 {
+        snake.height = max(0.0,snake.height - dt);
+    }
+    //snake.head_height =
+
     //Move body
     if is_started {
         prev_point := snake.head;
         for 0..snake.tail.count-1 {
-            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
+
+            percentage :=  cast(float)it / snake.tail.count;
+            percentage = ifx percentage < 0.95 then 1.0 else 0.1;
+            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS * percentage);
             prev_point = snake.tail[it];
         }
     }
@@ -741,7 +781,7 @@ simulate :: () {
     //Tummy logic
     for i : 0..tummy_bloats.count-1{
         if !(tummy_counters[i] <= 0.0) {
-            current_index : u32 = xx ((snake.tail.count-1)*(1.0-tummy_counters[i]));
+            current_index : u32 = xx ((snake.tail.count-1)*clamp(1.0-tummy_counters[i],0.0,1.0));
             cycled_point := cycle_point2(snake.tail[current_index]);
             tummy_bloats[i] = .{cycled_point.x,cycled_point.y,tummy_counters[i]};
             tummy_counters[i] -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and above
@@ -751,6 +791,24 @@ simulate :: () {
     }
 
     resolve_collisions();
+}
+
+recalculate_tummy_bloats :: () {
+    total_dist : float = DISTANCE_BETWEEN_TAIL_POINTS * (snake.tail.count-1);
+    new_total_dist : float = DISTANCE_BETWEEN_TAIL_POINTS * (snake.tail.count);
+    for i : 0..tummy_counters.count-1 {
+        //new_counter : float = cast(float)((snake.tail.count) * tummy_counters[i]) / (snake.tail.count-1);
+        if isnan(tummy_counters[i]) then continue;
+        new_index : float = tummy_counters[i] * new_total_dist;
+        //new_dist : float = new_index * DISTANCE_BETWEEN_TAIL_POINTS;
+        new_counter : float = new_index / new_total_dist;
+
+        print("\nCounter: % count: %",tummy_counters[i],snake.tail.count);
+        print("\nnew_index: %",new_index);
+        //print("\nnew_dist: %",new_dist);
+        print("\nnew_counter: %",new_counter);
+        tummy_counters[i] = new_counter;
+    }
 }
 
 is_outside_game_area :: (point : Vector2) -> bool {
@@ -766,26 +824,25 @@ destroy_tail :: () {
 }
 
 add_to_tail :: () {
-    dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else direction;
-
-    array_add(*snake.tail, snake.tail[snake.tail.count-1] + dir);
+    dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else -direction;
 
     point := snake.tail[snake.tail.count-1] + dir;
-    array_add(*graphics.tail, .{point.x,point.y,0,0,0});
-    array_add(*graphics.tail, .{point.x,point.y,0,0,0});
+    array_add(*snake.tail, point);
+
+    array_add(*graphics.tail, .{point.x,point.y,0.0,0.0,1.0,1.0});
+    array_add(*graphics.tail, .{point.x,point.y,1.0,0.0,1.0,1.0});
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,6*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 
-    print("\nTail count: %", snake.tail.count);
-    print("\nGraphic count: %", graphics.tail.count);
-
+    //recalculate_tummy_bloats();
 }
 
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
-    array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
-    array_add(*graphics.tail, .{pos.x,pos.y,0,0,0});
+    array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
+    array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
+    //recalculate_tummy_bloats();
 }
 
 add_to_tail_deferred :: (count : int) {
@@ -890,19 +947,22 @@ prepare_render :: () {
     //VBO
     glGenBuffers(1,*tail_VBO);
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
-    glBufferData(GL_ARRAY_BUFFER,5*graphics.tail.count*size_of(float) + 100,graphics.tail.data,GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,6*graphics.tail.count*size_of(float) + 100,graphics.tail.data,GL_DYNAMIC_DRAW);
     //VAO
     glGenVertexArrays(1,*tail_VAO);
     glBindVertexArray(tail_VAO);
     //Vertex Pointers
-    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,5*size_of(float),xx 0);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,6*size_of(float),xx 0);
     glEnableVertexAttribArray(0);
     //Texture uvs
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,5*size_of(float), xx (2 * size_of(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,6*size_of(float), xx (2 * size_of(float)));
     glEnableVertexAttribArray(1);
-    //Texture uvs
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE,5*size_of(float), xx (4 * size_of(float)));
+    //tail_percentage
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE,6*size_of(float), xx (4 * size_of(float)));
     glEnableVertexAttribArray(2);
+    //tail size
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE,6*size_of(float), xx (5 * size_of(float)));
+    glEnableVertexAttribArray(3);
 
     //***********************************
     //***************HEAD****************
@@ -1125,6 +1185,7 @@ render :: () {
         tail_uv_offset_location       := glGetUniformLocation(tail_shader, "uv_offset");
         tail_tummy_bloats_location       := glGetUniformLocation(tail_shader, "tummy_bloats");
 
+        //tail_model := (scale(Matrix4_Identity,Vector3.{1,1,1}*(snake.height+1.0)) * translate(Matrix4_Identity,-cycle_point3(snake.head))) + translate(Matrix4_Identity,cycle_point3(snake.head));
         tail_model := Matrix4_Identity;
         glUniformMatrix4fv(tail_model_location     , 1, GL_TRUE, xx *tail_model);
         glUniformMatrix4fv(tail_view_location      , 1, GL_TRUE, xx *view);
@@ -1136,7 +1197,7 @@ render :: () {
         glUniform2f(tail_uv_offset_location,uv_offset.x,uv_offset.y);
         glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
-        glBufferSubData(GL_ARRAY_BUFFER,0,5*graphics.tail.count*size_of(float),graphics.tail.data);
+        glBufferSubData(GL_ARRAY_BUFFER,0,6*graphics.tail.count*size_of(float),graphics.tail.data);
 
         start : s32 = 0;
         for #v2 < cut : graphics.tail_cuts {
@@ -1153,7 +1214,7 @@ render :: () {
     {
         angle := angle_between(.{0,-1}, direction);
         set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
-        head_model :=  translate(Matrix4_Identity,cycle_point3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2) * rotate(Matrix4_Identity,head_rotation);
+        head_model :=  translate(Matrix4_Identity,cycle_point3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2 * (snake.height+1)) * rotate(Matrix4_Identity,head_rotation);
 
 
         glBindVertexArray(head_VAO);
@@ -1225,6 +1286,9 @@ generate_fan_circle :: (vertices : *[..]float, radius : float = 1.0, count : int
 
 Snake :: struct {
     head : Vector2;
+    height : float;
+    raised_epsilon : float;
+    jump_counter : float;
     tail : [..]Vector2;
 }
 
@@ -1234,16 +1298,17 @@ TummyBloat :: struct {
 }
 
 GraphicBuffers :: struct {
-    tail : [..]Vector5;
+    tail : [..]Vector6;
     tail_cuts : [..]s32;
 }
 
-Vector5 :: struct {
+Vector6 :: struct {
     x : float;
     y : float;
     z : float;
     w : float;
     k : float;
+    j : float;
 }
 
 KeyState :: struct {

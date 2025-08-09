@@ -142,7 +142,6 @@ resolve_collisions :: () {
 
     //Collision of the *TAIL* with *OBSTACLES*
     {
-        count : int = 0;
         for obstacle,i : obstacles {
             obstacle_grid := point_to_grid(cycle_point2(obstacle.point));
 
