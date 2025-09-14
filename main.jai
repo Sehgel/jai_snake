@@ -665,7 +665,8 @@ process_input :: () {
     test_point.y += direction.y*speed*dt;
 
     if key_y{
-        for 0..5 add_to_tail();
+        print("\nTail: %", snake.tail.count);
+        add_to_tail();
         //calculate_next_pickup_target(generate_new_pickup_at_random(.RAT,PICKUP_RADIUS));
     }
 
@@ -736,7 +737,7 @@ simulate :: () {
 
             percentage :=  cast(float)it / snake.tail.count;
             percentage = ifx percentage < 0.95 then 1.0 else 0.1;
-            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS * percentage);
+            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS/*  * percentage */);
             prev_point = snake.tail[it];
         }
     }
@@ -766,7 +767,7 @@ simulate :: () {
     for #v2 < *digestion, i : digesting {
         if digestion.tail_points_to_add > 0 {
             if digestion.tail_adding_counter <= 0.0 {
-                for 0..2 add_to_tail();
+                add_to_tail();
                 digestion.tail_points_to_add -= 1;
                 digestion.tail_adding_counter = TAIL_ADD_DELAY;
                 if digestion.tail_points_to_add <= 0 {
@@ -790,23 +791,29 @@ simulate :: () {
         }
     }
 
+    //print("\nCount: %", snake.tail.count);
+
+    for i : 0..tummy_counters.count-1 {
+        if tummy_counters[i] >= 0.0 {
+            //print("\nTummy counters[%]=%",i,tummy_counters[i]);
+        }
+    }
+
     resolve_collisions();
 }
 
 recalculate_tummy_bloats :: () {
-    total_dist : float = DISTANCE_BETWEEN_TAIL_POINTS * (snake.tail.count-1);
-    new_total_dist : float = DISTANCE_BETWEEN_TAIL_POINTS * (snake.tail.count);
-    for i : 0..tummy_counters.count-1 {
-        //new_counter : float = cast(float)((snake.tail.count) * tummy_counters[i]) / (snake.tail.count-1);
-        if isnan(tummy_counters[i]) then continue;
-        new_index : float = tummy_counters[i] * new_total_dist;
-        //new_dist : float = new_index * DISTANCE_BETWEEN_TAIL_POINTS;
-        new_counter : float = new_index / new_total_dist;
+    old_count : int = snake.tail.count - 1;
+    total_old_dist : float = old_count * DISTANCE_BETWEEN_TAIL_POINTS;
+    total_new_dist : float = snake.tail.count * DISTANCE_BETWEEN_TAIL_POINTS;
 
-        print("\nCounter: % count: %",tummy_counters[i],snake.tail.count);
-        print("\nnew_index: %",new_index);
-        //print("\nnew_dist: %",new_dist);
-        print("\nnew_counter: %",new_counter);
+    for i : 0..tummy_counters.count-1 {
+        if tummy_counters[i] < 0.0 then continue;
+
+        old_dist : float = xx (tummy_counters[i] * total_old_dist);
+        new_dist : float = xx remap(xx old_dist,0.0,0.0,xx total_old_dist,xx total_new_dist);
+        new_counter : float = (new_dist / total_new_dist);
+        print("\nRemapping: %, from_a: %, from_b: %, to_a: %, to_b: % = %, new_counter: %",old_dist,0,0,total_old_dist,total_new_dist,new_dist,new_counter);
         tummy_counters[i] = new_counter;
     }
 }
@@ -823,26 +830,28 @@ destroy_tail :: () {
 
 }
 
-add_to_tail :: () {
-    dir := ifx snake.tail.count > 1 then snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2] else -direction;
+add_to_tail :: (count : int = 1) {
+    for 0..count-1 {
+        dir := ifx snake.tail.count > 1 then normalize(snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2]) else -direction;
 
-    point := snake.tail[snake.tail.count-1] + dir;
-    array_add(*snake.tail, point);
+        point := snake.tail[snake.tail.count-1] + dir*DISTANCE_BETWEEN_TAIL_POINTS*0.5;
+        array_add(*snake.tail, point);
 
-    array_add(*graphics.tail, .{point.x,point.y,0.0,0.0,1.0,1.0});
-    array_add(*graphics.tail, .{point.x,point.y,1.0,0.0,1.0,1.0});
+        array_add(*graphics.tail, .{point.x,point.y,0,0,1,1});
+        array_add(*graphics.tail, .{point.x,point.y,1,0,1,1});
+        recalculate_tummy_bloats();
+    }
 
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,6*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 
-    //recalculate_tummy_bloats();
 }
 
 add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
-    //recalculate_tummy_bloats();
+    recalculate_tummy_bloats();
 }
 
 add_to_tail_deferred :: (count : int) {
@@ -1397,6 +1406,10 @@ slow_time_for :: (time : float, time_scale_start : float = 0.0) {
     time_slow_time = time;
     time_slow_counter = time;
     time_scale = time_scale_start;
+}
+
+remap :: (value : float, from_a : float, from_b: float, to_a : float, to_b : float) -> float{
+    return from_b + (value - from_a) * (to_b - from_b) / (to_a - from_a);
 }
 
 #import "Basic";
