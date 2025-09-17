@@ -23,6 +23,8 @@ HEAD_SIZE :: 12;
 PICKUP_RADIUS :: 8;
 WALL_SIZE :: 16;
 
+DIGESTION_POINTS :: 8;
+
 //CAMERA
 cam_shake_strength := 3.0;
 cam_shake_counter : float;
@@ -169,7 +171,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    //if OS == .WINDOWS wglSwapIntervalEXT(1);
+    if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -376,6 +378,7 @@ init :: () {
     //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
     generate_map_details();
     generate_base_tail();
+    restart_tummy();
 
     is_alive = true;
     generate_walls();
@@ -558,7 +561,7 @@ eat_pickup :: (pickup_index : int) {
     for i : 0..tummy_bloats.count-1 {
         if length(tummy_bloats[i]) <= 0.0 {
             tummy_bloats[i] = .{snake.tail[0].x,snake.tail[0].y,0.0};
-            tummy_counters[i] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as below
+            tummy_counters[i] = 0.0;//1.0 - (5.0/snake.tail.count);//This 5 is the same as below
             found_place = true;
             break;
         }
@@ -571,7 +574,7 @@ eat_pickup :: (pickup_index : int) {
         }
 
         tummy_bloats[tummy_bloats.count-1] = .{snake.tail[5].x,snake.tail[5].y,0.0};//This 5 is the same as above
-        tummy_counters[tummy_counters.count-1] = 1.0 - (5.0/snake.tail.count);//This 5 is the same as above
+        tummy_counters[tummy_counters.count-1] = 0.0;//1.0 - (5.0/snake.tail.count);//This 5 is the same as above
     }
 
     destroy_pickup_by_index(pickup_index);
@@ -608,11 +611,13 @@ restart_game :: () {
         digestion.tail_points_to_add = 0;
         digestion.tail_adding_counter = 0.0;
     }
+    restart_tummy();
+}
 
-    //Restart tummy
+restart_tummy :: () {
     for i : 0..tummy_bloats.count-1 {
         tummy_bloats[i] = .{0.0,0.0,0.0};
-        tummy_counters[i] = 0.0;
+        tummy_counters[i] = 9.0;
     }
 }
 
@@ -781,40 +786,35 @@ simulate :: () {
 
     //Tummy logic
     for i : 0..tummy_bloats.count-1{
-        if !(tummy_counters[i] <= 0.0) {
-            current_index : u32 = xx ((snake.tail.count-1)*clamp(1.0-tummy_counters[i],0.0,1.0));
+        if tummy_counters[i] <= 1.0 {
+            current_index : u32 = xx ((snake.tail.count-1)*clamp(tummy_counters[i],0.0,1.0));
             cycled_point := cycle_point2(snake.tail[current_index]);
             tummy_bloats[i] = .{cycled_point.x,cycled_point.y,tummy_counters[i]};
-            tummy_counters[i] -= dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and above
+            tummy_counters[i] += dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and above
         }else {
             tummy_bloats[i] = .{0.0,0.0,0.0};
         }
     }
 
     //print("\nCount: %", snake.tail.count);
-
+    /*
     for i : 0..tummy_counters.count-1 {
-        if tummy_counters[i] >= 0.0 {
-            //print("\nTummy counters[%]=%",i,tummy_counters[i]);
+        if tummy_counters[i] <= 1.0 {
+            print("\nTummy counters[%]=%",i,tummy_counters[i]);
         }
     }
-
+    */
     resolve_collisions();
 }
 
-recalculate_tummy_bloats :: () {
-    old_count : int = snake.tail.count - 1;
-    total_old_dist : float = old_count * DISTANCE_BETWEEN_TAIL_POINTS;
-    total_new_dist : float = snake.tail.count * DISTANCE_BETWEEN_TAIL_POINTS;
+recalculate_tummy_bloats :: (old_count : int) {
 
     for i : 0..tummy_counters.count-1 {
-        if tummy_counters[i] < 0.0 then continue;
+        if tummy_counters[i] > 1.0 then continue;
 
-        old_dist : float = xx (tummy_counters[i] * total_old_dist);
-        new_dist : float = xx remap(xx old_dist,0.0,0.0,xx total_old_dist,xx total_new_dist);
-        new_counter : float = (new_dist / total_new_dist);
-        print("\nRemapping: %, from_a: %, from_b: %, to_a: %, to_b: % = %, new_counter: %",old_dist,0,0,total_old_dist,total_new_dist,new_dist,new_counter);
-        tummy_counters[i] = new_counter;
+        old_index : float = tummy_counters[i] * old_count;
+        new_index : float = old_index * (1.0 / snake.tail.count);
+        tummy_counters[i] = new_index;
     }
 }
 
@@ -831,7 +831,8 @@ destroy_tail :: () {
 }
 
 add_to_tail :: (count : int = 1) {
-    for 0..count-1 {
+    old_tail_count : int = snake.tail.count;
+    for 0..count {
         dir := ifx snake.tail.count > 1 then normalize(snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2]) else -direction;
 
         point := snake.tail[snake.tail.count-1] + dir*DISTANCE_BETWEEN_TAIL_POINTS*0.5;
@@ -839,9 +840,9 @@ add_to_tail :: (count : int = 1) {
 
         array_add(*graphics.tail, .{point.x,point.y,0,0,1,1});
         array_add(*graphics.tail, .{point.x,point.y,1,0,1,1});
-        recalculate_tummy_bloats();
     }
 
+    recalculate_tummy_bloats(old_tail_count);
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,6*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 
@@ -851,13 +852,12 @@ add_to_tail :: (pos : Vector2) {
     array_add(*snake.tail, pos);
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
-    recalculate_tummy_bloats();
+    //recalculate_tummy_bloats();
 }
 
+//Important
 add_to_tail_deferred :: (count : int) {
     array_add(*digesting,.{count,0.75});
-    //tail_points_to_add += 1;
-    //tail_adding_counter = 1.0;
 }
 
 remove_from_tail :: (index : int) {

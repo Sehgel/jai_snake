@@ -27,7 +27,7 @@ void main()
     vec2 dir = vec2(0.0,0.0);
 
     for (int i = 0; i < 10;++i) {
-        if (abs_diff(tail_percentage,tummy_bloats[i].z) < DIGESTION_SIZE*2.0) {
+        if (abs_diff(tail_percentage,1.0 - tummy_bloats[i].z) < DIGESTION_SIZE*2.0) {
             float new_dist = distance( tummy_bloats[i].xy,world_pos );
             if (new_dist < DIGESTION_RADIUS) {
                 dist = new_dist;
