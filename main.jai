@@ -5,8 +5,11 @@ FPS_TARGET :: 9999;
 
 MULTIPLIER :: 1080/48;
 
-WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
-WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
+//WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
+//WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
+
+WINDOW_HEIGHT :: 1080/1.5;
+WINDOW_WIDTH  :: WINDOW_HEIGHT;
 
 CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 //CENTER_POINT :: Vector2.{0,0};
@@ -140,7 +143,7 @@ main :: () {
 
     window := SDL_CreateWindow("Jai Snake",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        WINDOW_WIDTH, WINDOW_HEIGHT,
+        cast(s32)WINDOW_WIDTH, cast(s32)WINDOW_HEIGHT,
         SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN);
 
 
@@ -395,12 +398,12 @@ init :: () {
 generate_map_details :: () {
     array_reset(*map_details);
     //Generate details
-    for i : 0..WINDOW_WIDTH/(WALL_SIZE*2)-1 {
+    for i : 0..cast(int)WINDOW_WIDTH/(WALL_SIZE*2)-1 {
 
         /*if it % 2 != 0 then
             continue;
             */
-        for j : 0..WINDOW_HEIGHT/(WALL_SIZE*2)-1 {
+        for j : 0..cast(int)WINDOW_HEIGHT/(WALL_SIZE*2)-1 {
 
             if random_get_within_range(0,100) > 75 {
                 pos := Vector2.{xx (i*(WALL_SIZE*2) + WALL_SIZE),xx (j*(WALL_SIZE*2) + WALL_SIZE)};
@@ -417,9 +420,9 @@ generate_walls :: () {
 
     array_reset(*obstacles);
     //Generate obstacles
-    for i : 1..WINDOW_WIDTH/(WALL_SIZE*2)-3 {
+    for i : 1..cast(int)WINDOW_WIDTH/(WALL_SIZE*2)-3 {
 
-        for j : 1..WINDOW_HEIGHT/(WALL_SIZE*2)-3 {
+        for j : 1..cast(int)WINDOW_HEIGHT/(WALL_SIZE*2)-3 {
             //Skip middle row so the snake doesn't immediately crash with a wall
             if j == cast(int)(WINDOW_HEIGHT/(WALL_SIZE*2))/2 -1 {
                 continue;

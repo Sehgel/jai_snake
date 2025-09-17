@@ -1,8 +1,10 @@
 WALL_STEP :: WALL_SIZE*4;
-WIDTH_STEP :: WINDOW_WIDTH / WALL_STEP;
-HEIGHT_STEP :: WINDOW_HEIGHT / WALL_STEP;
+WIDTH_STEP : int;
+HEIGHT_STEP : int;
+//WIDTH_STEP :: WINDOW_WIDTH / WALL_STEP;
+//HEIGHT_STEP :: WINDOW_HEIGHT / WALL_STEP;
 
-collision_grid : [WIDTH_STEP][HEIGHT_STEP][..]Collider_Data;
+collision_grid : [..][..][..]Collider_Data;
 
 Collider_Data :: struct {
     point : Vector2;
@@ -11,6 +13,16 @@ Collider_Data :: struct {
 }
 
 init_physics :: () {
+
+    WIDTH_STEP = cast(int)ceil(WINDOW_WIDTH / WALL_STEP +1);
+    HEIGHT_STEP = cast(int)ceil(WINDOW_HEIGHT / WALL_STEP+1);
+
+    array_resize(*collision_grid,WIDTH_STEP);
+
+    for i : 0..collision_grid.count-1 {
+        array_resize(*collision_grid[i],HEIGHT_STEP);
+    }
+
     print("\nCount: %", collision_grid.count * collision_grid[0].count);
     print("\nWidth: %", WIDTH_STEP);
     print("\nHeight: %", HEIGHT_STEP);
@@ -26,6 +38,7 @@ reset_collision_grid :: () {
 
 update_collision_grid :: (point : Vector2, radius : float, index : int) {
     grid := point_to_grid(cycle_point2(point));
+    print("Grid: %\n",grid);
     array_add(*collision_grid[xx grid.x][xx grid.y],.{point,radius,index});
 }
 
