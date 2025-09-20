@@ -37,7 +37,7 @@ reset_collision_grid :: () {
 }
 
 update_collision_grid :: (point : Vector2, radius : float, index : int) {
-    x,y := point_to_grid(point);
+    x,y := point_to_grid(cycle_point2(point));
     //print("point: %, inter: %, grid: %\n",point,point/WALL_STEP,grid);
     array_add(*collision_grid[x][y],.{point,radius,index});
 }
@@ -54,7 +54,7 @@ resolve_collisions :: () {
     {
         for i : 0..snake.tail.count-1 {
             scale : float = 1.0 - (cast(float)i / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
-            update_collision_grid(cycle_point2(snake.tail[i]),HEAD_SIZE*scale,i);
+            update_collision_grid((snake.tail[i]),HEAD_SIZE*scale,i);
         }
     }
 
