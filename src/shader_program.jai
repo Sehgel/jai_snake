@@ -57,6 +57,6 @@ create_shader_program :: (vertex_file_path : string, fragment_file_path : string
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
 
-    print("\nSuccessfully created shader: %",shader_program);
+    print("Successfully created shader: %\n",shader_program);
     return shader_program;
 }

@@ -5,11 +5,11 @@ FPS_TARGET :: 9999;
 
 MULTIPLIER :: 1080/48;
 
-//WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
-//WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
+WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
+WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
 
-WINDOW_HEIGHT :: 1080/1.5;
-WINDOW_WIDTH  :: WINDOW_HEIGHT;
+//WINDOW_HEIGHT :: 1080/1.5;
+//WINDOW_WIDTH  :: WINDOW_HEIGHT;
 
 CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 //CENTER_POINT :: Vector2.{0,0};
@@ -174,7 +174,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    if OS == .WINDOWS wglSwapIntervalEXT(1);
+    //if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -439,44 +439,46 @@ generate_walls :: () {
 }
 
 update_tail_graphic :: () {
-        prev := snake.head;
-        last_pc := cycle_point2(snake.head);
-        graphics.tail_cuts.count = 0;
+    prev := snake.head;
+    last_pc := cycle_point2(snake.head);
+    graphics.tail_cuts.count = 0;
 
-        for i : 0..snake.tail.count-1 {
-            dir_to_last := normalize(prev - snake.tail[i]);
+    for i : 0..snake.tail.count-1 {
+        dir_to_last := normalize(prev - snake.tail[i]);
 
-            tail_epsilon := cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1);
-            distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
-            scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;
+        tail_epsilon := cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1);
+        distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
+        scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;
 
-            pc := cycle_point2(prev);
+        pc := cycle_point2(prev);
 
-            p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
-            p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
-
-
-            if distance(last_pc,pc) >= 10 {
-                //array_add(*graphics.tail_cuts,xx ((i)*2));
-                cut := (graphics.tail.count-1) - (i*2) + 1;
-                array_add(*graphics.tail_cuts,xx cut);
-            }
-
-            tail_repeat_factor := 2.0;
-            uv_y := cast(float)(i/tail_repeat_factor) / (snake.tail.count/tail_repeat_factor-1);
-
-            tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
-
-            graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
-            graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
+        p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
+        p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
 
 
-            prev = snake.tail[i];
-            last_pc = pc;
+        if distance(last_pc,pc) >= 10 {
+            //array_add(*graphics.tail_cuts,xx ((i)*2));
+            cut := (graphics.tail.count-1) - (i*2) + 1;
+            array_add(*graphics.tail_cuts,xx cut);
         }
+
+        tail_repeat_factor := 2.0;
+        uv_y := cast(float)(i/tail_repeat_factor) / (snake.tail.count/tail_repeat_factor-1);
+
+        tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
+
+        graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
+        graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
+
+
+        prev = snake.tail[i];
+        last_pc = pc;
+    }
 }
 
 kill :: () {
+
+    if !is_started then return;
 
     play_sound(*fail_sound);
 
@@ -529,6 +531,7 @@ get_available_particles_system :: (particle_system_pool : [..]*Particles_Emitter
 }
 
 play_sound :: (data: *Sound_Data) {
+    if true then return; //MUTED nocheckin
     stream := make_stream(data);
     //stream.user_volume_scale = random_get_within_range(0.5,  1);
     stream.rate_scale        = random_get_within_range(0.75, 1.22);
@@ -674,7 +677,9 @@ process_input :: () {
 
     if key_y{
         print("\nTail: %", snake.tail.count);
-        add_to_tail();
+        for 0..10 {
+            add_to_tail();
+        }
         //calculate_next_pickup_target(generate_new_pickup_at_random(.RAT,PICKUP_RADIUS));
     }
 
@@ -811,7 +816,6 @@ simulate :: () {
 }
 
 recalculate_tummy_bloats :: (old_count : int) {
-
     for i : 0..tummy_counters.count-1 {
         if tummy_counters[i] > 1.0 then continue;
 
@@ -1283,7 +1287,36 @@ render :: () {
     }
 
 
+    if true {//RENDER GRID POINTS
+        i : float = 0;
+        while i < WINDOW_WIDTH {
+            defer i += WALL_STEP;
+            j : float = 0;
+            while j < WINDOW_HEIGHT {
+                defer j += WALL_STEP;
+                t_point := tprint(".");
+                render_text(t_point,i,j,0.25,.{1,1,1}, *transpose(projection));
+            }
+        }
 
+        return;
+        for obstacle : obstacles {
+            o_point := tprint(".");
+            render_text(o_point,obstacle.point.x,obstacle.point.y,0.25,.{1,0,0}, *transpose(projection));
+
+            point_x, point_y := point_to_grid(obstacle.point) * WALL_STEP;
+            render_text(o_point,xx point_x,xx point_y,0.5,.{0,1,0}, *transpose(projection));
+        }
+
+        head_x, head_y := point_to_grid(cycle_point2(snake.head));
+
+        for i : -1..1 {
+            for j : -1..1{
+                h_point := tprint("%/%",i,j);
+                render_text(h_point,xx ((head_x+i) * WALL_STEP),xx (10 + (head_y + j) * WALL_STEP),0.5,.{0,0,1}, *transpose(projection));
+            }
+        }
+    }
 }
 
 generate_fan_circle :: (vertices : *[..]float, radius : float = 1.0, count : int = 8) {
