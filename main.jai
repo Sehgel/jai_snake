@@ -440,7 +440,7 @@ generate_walls :: () {
 
 update_tail_graphic :: () {
     prev := snake.head;
-    last_pc := cycle_point2(snake.head);
+    last_pc := cycle(snake.head);
     graphics.tail_cuts.count = 0;
 
     for i : 0..snake.tail.count-1 {
@@ -450,7 +450,7 @@ update_tail_graphic :: () {
         distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
         scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;
 
-        pc := cycle_point2(prev);
+        pc := cycle(prev);
 
         p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
         p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
@@ -487,7 +487,7 @@ kill :: () {
     forward_dir := normalize(direction);
     perpendicular := rotate(forward_dir,TAU/4);
 
-    point := cycle_point2(snake.head);
+    point := cycle(snake.head);
 
     a := (point - perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
     b := (point + perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
@@ -508,7 +508,7 @@ jump :: () {
     snake.raised_epsilon = 0.0;
     forward_dir := normalize(direction);
     perpendicular := rotate(forward_dir,TAU/4);
-    point := cycle_point2(snake.head);
+    point := cycle(snake.head);
     a := (point - perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
     b := (point + perpendicular*HEAD_SIZE) + forward_dir * HEAD_SIZE;
 
@@ -545,7 +545,7 @@ eat_pickup :: (pickup_index : int) {
     pickup_point := pickups[pickup_index].point;
 
     snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
-    snake.head = adjust_wraps(cycle_point2(pickup_point),snake_head_wraps);
+    snake.head = adjust_wraps(cycle(pickup_point),snake_head_wraps);
 
     //Particles
     forward_dir := normalize(direction);
@@ -796,7 +796,7 @@ simulate :: () {
     for i : 0..tummy_bloats.count-1{
         if tummy_counters[i] <= 1.0 {
             current_index : u32 = xx ((snake.tail.count-1)*clamp(tummy_counters[i],0.0,1.0));
-            cycled_point := cycle_point2(snake.tail[current_index]);
+            cycled_point := cycle(snake.tail[current_index]);
             tummy_bloats[i] = .{cycled_point.x,cycled_point.y,tummy_counters[i]};
             tummy_counters[i] += dt/(DIGEST_TIME*snake.tail.count*0.05);//Same here and above
         }else {
@@ -1050,7 +1050,7 @@ render :: () {
     //Drawing Map Details
     //****************
     for detail : map_details {
-        detail_model :=  translate(Matrix4_Identity,cycle_point3(detail.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*4);
+        detail_model :=  translate(Matrix4_Identity,cycle3(detail.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*4);
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *detail_model);
@@ -1114,7 +1114,7 @@ render :: () {
     //Drawing Obstacles
     //****************
     for obstacle : obstacles {
-        obstacle_model :=  translate(Matrix4_Identity,cycle_point3(obstacle.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*obstacle.radius*2);
+        obstacle_model :=  translate(Matrix4_Identity,cycle3(obstacle.point)) * scale(Matrix4_Identity,Vector3.{1,1,1}*obstacle.radius*2);
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *obstacle_model);
@@ -1146,7 +1146,7 @@ render :: () {
         angle := angle_between(.{0,-1},tail_direction);
         tail_tip_rotation : Quaternion;
         set_from_axis_and_angle(*tail_tip_rotation,.{0,0,1},xx angle);
-        head_model :=  translate(Matrix4_Identity,cycle_point3(snake.tail[snake.tail.count-2])) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2.25)  * rotate(Matrix4_Identity,tail_tip_rotation);
+        head_model :=  translate(Matrix4_Identity,cycle3(snake.tail[snake.tail.count-2])) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2.25)  * rotate(Matrix4_Identity,tail_tip_rotation);
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
@@ -1168,7 +1168,7 @@ render :: () {
     //****************
     //Model
     {
-        head_model :=  translate(Matrix4_Identity,cycle_point3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
+        head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
 
 
         glBindVertexArray(head_VAO);
@@ -1201,7 +1201,7 @@ render :: () {
         tail_uv_offset_location       := glGetUniformLocation(tail_shader, "uv_offset");
         tail_tummy_bloats_location       := glGetUniformLocation(tail_shader, "tummy_bloats");
 
-        //tail_model := (scale(Matrix4_Identity,Vector3.{1,1,1}*(snake.height+1.0)) * translate(Matrix4_Identity,-cycle_point3(snake.head))) + translate(Matrix4_Identity,cycle_point3(snake.head));
+        //tail_model := (scale(Matrix4_Identity,Vector3.{1,1,1}*(snake.height+1.0)) * translate(Matrix4_Identity,-cycle3(snake.head))) + translate(Matrix4_Identity,cycle3(snake.head));
         tail_model := Matrix4_Identity;
         glUniformMatrix4fv(tail_model_location     , 1, GL_TRUE, xx *tail_model);
         glUniformMatrix4fv(tail_view_location      , 1, GL_TRUE, xx *view);
@@ -1230,7 +1230,7 @@ render :: () {
     {
         angle := angle_between(.{0,-1}, direction);
         set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
-        head_model :=  translate(Matrix4_Identity,cycle_point3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2 * (snake.height+1)) * rotate(Matrix4_Identity,head_rotation);
+        head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2 * (snake.height+1)) * rotate(Matrix4_Identity,head_rotation);
 
 
         glBindVertexArray(head_VAO);
@@ -1244,7 +1244,7 @@ render :: () {
             sprite_index = 2;
         }
         else{
-            sprite_index = ifx is_pickup_nearbyv2(cycle_point2(snake.head),snake.head-snake.tail[0],100.0) then 1 else 0;
+            sprite_index = ifx is_pickup_nearbyv2(cycle(snake.head),snake.head-snake.tail[0],100.0) then 1 else 0;
         }
         uv_offset := get_atlas_uv_offset(xx sprite_index);
         glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
@@ -1308,7 +1308,7 @@ render :: () {
             render_text(o_point,xx point_x,xx point_y,0.5,.{0,1,0}, *transpose(projection));
         }
 
-        head_x, head_y := point_to_grid(cycle_point2(snake.head));
+        head_x, head_y := point_to_grid(cycle(snake.head));
 
         for i : -1..1 {
             for j : -1..1{
@@ -1442,10 +1442,6 @@ slow_time_for :: (time : float, time_scale_start : float = 0.0) {
     time_slow_time = time;
     time_slow_counter = time;
     time_scale = time_scale_start;
-}
-
-remap :: (value : float, from_a : float, from_b: float, to_a : float, to_b : float) -> float{
-    return from_b + (value - from_a) * (to_b - from_b) / (to_a - from_a);
 }
 
 #import "Basic";
