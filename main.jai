@@ -15,7 +15,7 @@ CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 //CENTER_POINT :: Vector2.{0,0};
 PADDING :: 10.0;
 
-TAIL_POINTS_SKIPPED :: 20;
+TAIL_POINTS_SKIPPED :: 5;
 TAIL_ADD_DELAY :: 0.05;
 DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
@@ -57,7 +57,7 @@ key_debug : KeyState;
 snake : Snake;
 tummy_bloats : [10]Vector3;
 tummy_counters : [10]float;
-pickups : [..]PickUp;
+pickups : [..]Pickup;
 obstacles : [..]Obstacle;
 map_details : [..]MapDetail;
 
@@ -76,7 +76,7 @@ is_alive : bool = false;
 is_started : bool = false;
 test_point : Vector2;
 test_circle : Vector2;
-
+teleport_head_flag : Frame_Delayed_Callback;
 
 Digestion :: struct {
     tail_points_to_add : int;
@@ -174,7 +174,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    //if OS == .WINDOWS wglSwapIntervalEXT(1);
+    if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -341,7 +341,7 @@ init :: () {
 
     do_async_audio := (OS != .ANDROID);
     success := sound_player_init(.{update_from_a_thread = do_async_audio});
-    assert(success);
+    //assert(success);
 
     //
     // Create the music stream.
@@ -455,7 +455,6 @@ update_tail_graphic :: () {
         p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
         p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
 
-
         if distance(last_pc,pc) >= 10 {
             //array_add(*graphics.tail_cuts,xx ((i)*2));
             cut := (graphics.tail.count-1) - (i*2) + 1;
@@ -470,7 +469,6 @@ update_tail_graphic :: () {
         graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
         graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
 
-
         prev = snake.tail[i];
         last_pc = pc;
     }
@@ -481,7 +479,6 @@ kill :: () {
     if !is_started then return;
 
     play_sound(*fail_sound);
-
 
     //Particles
     forward_dir := normalize(direction);
@@ -530,8 +527,13 @@ get_available_particles_system :: (particle_system_pool : [..]*Particles_Emitter
     return null;
 }
 
+teleport_head :: (position : Vector2) {
+    snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
+    snake.head = adjust_wraps(cycle(position),snake_head_wraps);    
+}
+
 play_sound :: (data: *Sound_Data) {
-    if true then return; //MUTED nocheckin
+    //if true then return; //MUTED nocheckin
     stream := make_stream(data);
     //stream.user_volume_scale = random_get_within_range(0.5,  1);
     stream.rate_scale        = random_get_within_range(0.75, 1.22);
@@ -544,8 +546,7 @@ eat_pickup :: (pickup_index : int) {
 
     pickup_point := pickups[pickup_index].point;
 
-    snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
-    snake.head = adjust_wraps(cycle(pickup_point),snake_head_wraps);
+    teleport_head_flag = .{true,teleport_head,pickup_point};
 
     //Particles
     forward_dir := normalize(direction);
@@ -705,6 +706,11 @@ process_input :: () {
 }
 
 simulate :: () {
+
+    if teleport_head_flag.trigger {
+	teleport_head_flag.trigger = false;
+	teleport_head_flag.callback(teleport_head_flag.position);
+    }
     //Particles
     update_particle_systems(u_dt);
 
@@ -873,12 +879,12 @@ remove_from_tail :: (index : int) {
     array_ordered_remove_by_index(*graphics.tail,index*2);
 }
 
-generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) -> *PickUp {
-    array_add(*pickups,.{point = point,radius = radius,type = type,target = .{},counter = 0.0});
+generate_new_pickup :: (type : Pickup_Type, point : Vector2, radius : float) -> *Pickup {
+    array_add(*pickups,.{point = point,radius = radius,type = type,target = .{},counter = 0.0, behaviour_proc = get_pickup_proc(type)});
     return *pickups[pickups.count-1];
 }
 
-generate_new_pickup_at_random :: (type : Pickup_Type, radius : float) -> *PickUp {
+generate_new_pickup_at_random :: (type : Pickup_Type, radius : float) -> *Pickup {
     random_pos := Vector2.{random_get_within_range(WALL_SIZE*2,WINDOW_WIDTH-WALL_SIZE*2),random_get_within_range(WALL_SIZE*2,WINDOW_HEIGHT-WALL_SIZE*2)};
 
     if type == {
@@ -890,6 +896,13 @@ generate_new_pickup_at_random :: (type : Pickup_Type, radius : float) -> *PickUp
             random_pos = limit_point_to_outside_viewport(random_pos);
     }
     return generate_new_pickup(type,random_pos,radius);
+}
+
+get_pickup_proc :: (type : Pickup_Type) -> ((pickup : *Pickup) -> ()) {
+    if type == {
+        case .RAT;
+            return rat_pickup_proc;
+    }
 }
 
 limit_point_to_outside_viewport :: (v : Vector2) -> Vector2 {
@@ -1287,7 +1300,7 @@ render :: () {
     }
 
 
-    if true {//RENDER GRID POINTS
+    if false {//RENDER GRID POINTS no checkin
         i : float = 0;
         while i < WINDOW_WIDTH {
             defer i += WALL_STEP;
@@ -1362,14 +1375,26 @@ KeyState :: struct {
     awaits_reset : bool;
 }
 
-PickUp :: struct {
+Pickup :: struct {
     point : Vector2;
     radius : float;
     type : Pickup_Type;
+    behaviour_proc : #type (pickup : *Pickup) -> ();
 
     target : Vector2;
     counter : float;
     spawn_counter : float;
+}
+
+rat_pickup_proc :: (pickup : *Pickup) {
+    dist := distance(pickup.target,pickup.point);
+    if dist < 0.01 {
+        calculate_next_pickup_target(pickup);
+        return;
+    }
+    dir := normalize(pickup.target - pickup.point);
+
+    pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
 }
 
 Obstacle :: struct {
@@ -1390,6 +1415,12 @@ Pickup_Type :: enum u32 {
     END;
 }
 
+Frame_Delayed_Callback :: struct {
+    trigger : bool;
+    callback : (Vector2) -> ();
+    position : Vector2;
+}
+
 get_atlas_uv_offset :: (index : s32) -> Vector2 {
     y : float = xx (index / (sprite_atlas_width/64));
     y = (y*SPRITE_ATLAS_SIZE) / sprite_atlas_height;
@@ -1405,7 +1436,7 @@ get_random_pickup_type :: () -> Pickup_Type{
     return cast(Pickup_Type)random_get_within_range(1.0,xx get_pickup_types_count());
 }
 
-calculate_next_pickup_target :: (pickup : *PickUp) {
+calculate_next_pickup_target :: (pickup : *Pickup) {
     if pickup.type == .RAT {
         random_pos := Vector2.{random_get_within_range(0,WINDOW_WIDTH),random_get_within_range(0,WINDOW_HEIGHT)};
         random_pos = limit_point_to_outside_viewport(random_pos);

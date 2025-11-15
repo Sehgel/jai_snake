@@ -79,9 +79,7 @@ resolve_collisions :: () {
     snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)}
 ;
 
-    count : int = 0;//TODO: REMOVE
-
-    if true
+    if false
     {//Collision head with tail OPTIMIZED using Grid
 
         head_x,head_y := point_to_grid(cycle(snake.head));
@@ -104,7 +102,6 @@ resolve_collisions :: () {
         i := snake.tail.count-1;
         while i >= TAIL_POINTS_SKIPPED {
             defer i -= 10;
-            count +=1;
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
             if check_circle_collision(cycle(snake.head),HEAD_SIZE,cycle(snake.tail[i]),HEAD_SIZE*scale) {
                 kill();
