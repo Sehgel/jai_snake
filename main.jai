@@ -5,13 +5,13 @@ FPS_TARGET :: 9999;
 
 MULTIPLIER :: 1080/48;
 
-WINDOW_WIDTH  :: BASE_WIDTH*MULTIPLIER;
-WINDOW_HEIGHT :: BASE_HEIGHT*MULTIPLIER;
+WINDOW_WIDTH  : float= 0;
+WINDOW_HEIGHT : float= 0;
 
 //WINDOW_HEIGHT :: 1080/1.5;
 //WINDOW_WIDTH  :: WINDOW_HEIGHT;
 
-CENTER_POINT :: Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
+CENTER_POINT : Vector2;
 //CENTER_POINT :: Vector2.{0,0};
 PADDING :: 10.0;
 
@@ -141,9 +141,18 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, xx SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
+    display_mode : SDL_DisplayMode;
+    SDL_GetCurrentDisplayMode(0,*display_mode);
+
+    WINDOW_HEIGHT = xx (display_mode.h*0.75);
+    WINDOW_WIDTH = WINDOW_HEIGHT;
+
+    CENTER_POINT = Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
+
+
     window := SDL_CreateWindow("Jai Snake",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-        cast(s32)WINDOW_WIDTH, cast(s32)WINDOW_HEIGHT,
+        cast(s32)WINDOW_WIDTH, cast(s32)(WINDOW_HEIGHT),
         SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN);
 
 
@@ -386,10 +395,12 @@ init :: () {
     is_alive = true;
     generate_walls();
     for 0..2 {
-        generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
+        new_pickup := generate_new_pickup_at_random(get_random_pickup_type(),PICKUP_RADIUS);
+
     }
     for *pickup : pickups {
         calculate_next_pickup_target(pickup);
+	pickup.counter = -5.0;
     }
     //array_add(*graphics.tail_cuts,50);
     //array_add(*graphics.tail_cuts,100);
@@ -762,22 +773,24 @@ simulate :: () {
     }
 
     //Update pickups
-    for *pickup : pickups {
-        if pickup.type == .RAT {
-            dist := distance(pickup.target,pickup.point);
-            if dist < 0.01 {
-                calculate_next_pickup_target(pickup);
-                continue;
-            }
-            dir := normalize(pickup.target - pickup.point);
+    if is_started {
+	for *pickup : pickups {
+            if pickup.type == .RAT {
+		dist := distance(pickup.target,pickup.point);
+		if dist < 0.01 {
+                    calculate_next_pickup_target(pickup);
+                    continue;
+		}
+		dir := normalize(pickup.target - pickup.point);
 
-            pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
-        }
-        else if pickup.type == .FROG && pickup.spawn_counter >= 0.35 {
-            pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
-        }
-        pickup.counter += dt;
-        pickup.spawn_counter += dt;
+		pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
+            }
+            else if pickup.type == .FROG && pickup.spawn_counter >= 0.35 {
+		pickup.point = move_towards(pickup.point,pickup.target,1500*dt);
+            }
+            pickup.counter += dt;
+            pickup.spawn_counter += dt;
+	}
     }
 
     //@IMPORTANT: This needs a rework to account for multiple digestions
@@ -980,6 +993,7 @@ prepare_render :: () {
     //VAO
     glGenVertexArrays(1,*tail_VAO);
     glBindVertexArray(tail_VAO);
+    
     //Vertex Pointers
     glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,6*size_of(float),xx 0);
     glEnableVertexAttribArray(0);
@@ -990,8 +1004,8 @@ prepare_render :: () {
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE,6*size_of(float), xx (4 * size_of(float)));
     glEnableVertexAttribArray(2);
     //tail size
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE,6*size_of(float), xx (5 * size_of(float)));
-    glEnableVertexAttribArray(3);
+//    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE,6*size_of(float), xx (5 * size_of(float)));
+//    glEnableVertexAttribArray(3);
 
     //***********************************
     //***************HEAD****************
