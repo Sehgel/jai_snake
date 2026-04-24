@@ -1,4 +1,4 @@
-WALL_STEP :: WALL_SIZE*4;
+WALL_STEP : float;
 WIDTH_STEP : int;
 HEIGHT_STEP : int;
 //WIDTH_STEP :: WINDOW_WIDTH / WALL_STEP;
@@ -13,6 +13,8 @@ Collider_Data :: struct {
 }
 
 init_physics :: () {
+
+    WALL_STEP = WALL_SIZE * 4;
 
     WIDTH_STEP  = cast(int)(WINDOW_WIDTH  / WALL_STEP)+1;
     HEIGHT_STEP = cast(int)(WINDOW_HEIGHT / WALL_STEP)+1;

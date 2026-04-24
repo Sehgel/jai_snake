@@ -3,8 +3,6 @@ BASE_HEIGHT   :: 32;
 
 FPS_TARGET :: 9999;
 
-MULTIPLIER :: 1080/48;
-
 WINDOW_WIDTH  : float= 0;
 WINDOW_HEIGHT : float= 0;
 
@@ -15,16 +13,15 @@ CENTER_POINT : Vector2;
 //CENTER_POINT :: Vector2.{0,0};
 PADDING :: 10.0;
 
-TAIL_POINTS_SKIPPED :: 5;
+TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.05;
 DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
 DIGEST_TIME :: 0.75;
 
-PIXEL_SIZE :: 8;
-HEAD_SIZE :: 12;
-PICKUP_RADIUS :: 8;
-WALL_SIZE :: 16;
+HEAD_SIZE : float = 12;
+PICKUP_RADIUS : float = 8;
+WALL_SIZE : float = 16;
 
 DIGESTION_POINTS :: 8;
 
@@ -149,6 +146,9 @@ main :: () {
 
     CENTER_POINT = Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 
+    HEAD_SIZE = ceil(WINDOW_HEIGHT / 96.0);
+    WALL_SIZE = ceil(WINDOW_HEIGHT / 96.0);
+
 
     window := SDL_CreateWindow("Jai Snake",
         SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -183,7 +183,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    if OS == .WINDOWS wglSwapIntervalEXT(1);
+    //if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -409,12 +409,12 @@ init :: () {
 generate_map_details :: () {
     array_reset(*map_details);
     //Generate details
-    for i : 0..cast(int)WINDOW_WIDTH/(WALL_SIZE*2)-1 {
+    for i : 0..cast(int)(WINDOW_WIDTH/(WALL_SIZE*2)-1) {
 
         /*if it % 2 != 0 then
             continue;
             */
-        for j : 0..cast(int)WINDOW_HEIGHT/(WALL_SIZE*2)-1 {
+        for j : 0..cast(int)(WINDOW_HEIGHT/(WALL_SIZE*2)-1) {
 
             if random_get_within_range(0,100) > 75 {
                 pos := Vector2.{xx (i*(WALL_SIZE*2) + WALL_SIZE),xx (j*(WALL_SIZE*2) + WALL_SIZE)};
@@ -431,11 +431,11 @@ generate_walls :: () {
 
     array_reset(*obstacles);
     //Generate obstacles
-    for i : 1..cast(int)WINDOW_WIDTH/(WALL_SIZE*2)-3 {
+    for i : 1..cast(int)(WINDOW_WIDTH/(WALL_SIZE*2)-3) {
 
-        for j : 1..cast(int)WINDOW_HEIGHT/(WALL_SIZE*2)-3 {
+        for j : 1..cast(int)(WINDOW_HEIGHT/(WALL_SIZE*2)-3) {
             //Skip middle row so the snake doesn't immediately crash with a wall
-            if j == cast(int)(WINDOW_HEIGHT/(WALL_SIZE*2))/2 -1 {
+            if j == cast(int)((WINDOW_HEIGHT/(WALL_SIZE*2))/2 -1) {
                 continue;
             }
 
@@ -749,7 +749,6 @@ simulate :: () {
         }
     }
     snake.head += move_dir * speed * dt;
-
     //Head height
     if snake.jump_counter > 0.0 {
         snake.height += dt*2;
