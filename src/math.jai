@@ -79,3 +79,49 @@ sign :: (x : float) -> float {
 remap :: (value : float, from_a : float, from_b: float, to_a : float, to_b : float) -> float{
     return from_b + (value - from_a) * (to_b - from_b) / (to_a - from_a);
 }
+
+
+//Easing functions:
+
+ease_out_cubic :: (t : float) -> float {
+    u : float = t - 1.0;
+    return u * u * u + 1.0;
+}
+
+// Ease out — power of 2
+ease_out :: (t : float) -> float {
+    return t * (2.0 - t);
+}
+
+// Generalised
+ease_out_n :: (t : float, n : float) -> float {
+    return 1.0 - pow(1.0 - t, n);
+}
+
+// Smoothstep — cubic S-curve
+smoothstep :: (t : float) -> float{
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// Exponential ease in
+ease_in_expo :: (t : float) -> float{
+    return (ifx t == 0.0 then 0.0 else pow(2.0, 10.0 * t - 10.0));
+}
+
+// Exponential ease out
+ease_out_expo :: (t : float) -> float{
+    return ifx t == 1.0 then 1.0 else 1.0 - pow(2.0, -10.0 * t);
+}
+
+stepped :: (t : float, n : int) -> float{
+    return floor(t * cast(float)n) / cast(float)n;
+}
+
+exp_impulse :: (t : float, k : float) -> float {
+    return k * t * exp(1.0 - k * t);
+}
+
+parabola_arc :: (t : float) -> float {
+    return 4.0 * t * (1.0 - t);
+}
+

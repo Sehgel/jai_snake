@@ -1,0 +1,6 @@
+[] Add a trail particle effect on the snake's tail
+[] Fix jumping effect on tail
+[] Fix jumping collision detection
+[] Add behaviour to frogs
+[] Improve sprites
+[] Fix tail cuts (Seems to be always count = 0)

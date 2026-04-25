@@ -18,6 +18,7 @@ TAIL_ADD_DELAY :: 0.05;
 DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
 DIGEST_TIME :: 0.75;
+TAIL_REPEAT_FACTOR :: 4.0;
 
 HEAD_SIZE : float = 12;
 PICKUP_RADIUS : float = 8;
@@ -63,7 +64,7 @@ graphics : GraphicBuffers;
 direction : Vector2 = .{1,0};
 input := Vector2.{0,0};
 inputv2 := Vector2.{0,0};
-speed : float = 300;
+speed : float = 375;
 last_time : float64;
 dt : float;
 u_dt : float;
@@ -146,8 +147,8 @@ main :: () {
 
     CENTER_POINT = Vector2.{WINDOW_WIDTH-256,WINDOW_HEIGHT/2};
 
-    HEAD_SIZE = ceil(WINDOW_HEIGHT / 96.0);
-    WALL_SIZE = ceil(WINDOW_HEIGHT / 96.0);
+    HEAD_SIZE = ceil(WINDOW_HEIGHT / 48.0);
+    WALL_SIZE = ceil(WINDOW_HEIGHT / 48.0);
 
 
     window := SDL_CreateWindow("Jai Snake",
@@ -183,7 +184,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-    //if OS == .WINDOWS wglSwapIntervalEXT(1);
+//    if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -459,21 +460,23 @@ update_tail_graphic :: () {
 
         tail_epsilon := cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1);
         distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
-        scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;
+        scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;//1.0 is distance_to_raise_point 0.0 is tail_epsilon
+	scale = clamp(scale,0.25,1.0);
+	scale = ease_out_n(scale,1.25);
 
         pc := cycle(prev);
 
         p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
         p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
 
-        if distance(last_pc,pc) >= 10 {
+        if distance(last_pc,pc) >= DISTANCE_BETWEEN_TAIL_POINTS*2 {//10 Is the distance to detect when a snake crossed a border
             //array_add(*graphics.tail_cuts,xx ((i)*2));
             cut := (graphics.tail.count-1) - (i*2) + 1;
             array_add(*graphics.tail_cuts,xx cut);
         }
 
-        tail_repeat_factor := 2.0;
-        uv_y := cast(float)(i/tail_repeat_factor) / (snake.tail.count/tail_repeat_factor-1);
+        //uv_y := cast(float)(i/TAIL_REPEAT_FACTOR) / (snake.tail.count/TAIL_REPEAT_FACTOR-1);
+        uv_y := cast(float)(i/TAIL_REPEAT_FACTOR) / (snake.tail.count/TAIL_REPEAT_FACTOR);
 
         tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
 
@@ -1100,42 +1103,43 @@ render :: () {
     //****************
     //Drawing Pickups
     //****************
-    pickup_rotation : Quaternion;
-    for pickup : pickups {
-        dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
-        pickup_model :=  translate(Matrix4_Identity,.{pickup.point.x,pickup.point.y,0}) * scale(Matrix4_Identity,.{1,1,1}*ease_out_elastic(min(pickup.spawn_counter/1.0,1.0)));
+    
+	pickup_rotation : Quaternion;
+	for pickup : pickups {
+            dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
+            pickup_model :=  translate(Matrix4_Identity,.{pickup.point.x,pickup.point.y,0}) * scale(Matrix4_Identity,.{1,1,1}*ease_out_elastic(min(pickup.spawn_counter/1.0,1.0)));
 
-        glBindVertexArray(head_VAO);
-        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
-        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
-        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
-        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+            glBindVertexArray(head_VAO);
+            glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+            glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+            glUniform3f(sprite_tint_location, 1,1,1);
+            glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+            glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
 
-        uv_offset : Vector2;
-        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
-        if pickup.type == {
-            case .APPLE;
+            uv_offset : Vector2;
+            glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+            if pickup.type == {
+		case .APPLE;
                 uv_offset = get_atlas_uv_offset(20);
-            case .RAT;
+		case .RAT;
                 uv_offset = get_atlas_uv_offset(22);
                 angle := angle_between(.{0,-1}, normalize(pickup.target - pickup.point));
                 set_from_axis_and_angle(*pickup_rotation,.{0,0,1},xx angle);
                 pickup_model *= rotate(Matrix4_Identity,pickup_rotation);
-            case .FROG;
+		case .FROG;
                 uv_offset = get_atlas_uv_offset(23);
-        }
+            }
 
-        pickup_model *= scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2.25);
-        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *pickup_model);
-        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
-        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+            pickup_model *= scale(Matrix4_Identity,Vector3.{1 * dir,1,1}*HEAD_SIZE*2.25);
+            glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *pickup_model);
+            glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
+            glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
 
 
-        glBindBuffer(GL_ARRAY_BUFFER,0);
-        glBindTexture(GL_TEXTURE_2D,0);
-    }
-
+            glBindBuffer(GL_ARRAY_BUFFER,0);
+            glBindTexture(GL_TEXTURE_2D,0);
+	}
+    
     //****************
     //Drawing Obstacles
     //****************
@@ -1193,7 +1197,7 @@ render :: () {
     //Drawing Under Head
     //****************
     //Model
-    {
+    {//TODO: Seems to be buggy on wait screen on start
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
 
 
@@ -1370,7 +1374,7 @@ TummyBloat :: struct {
 
 GraphicBuffers :: struct {
     tail : [..]Vector6;
-    tail_cuts : [..]s32;
+    tail_cuts : [..]s32; // This is used to render the snakes tails when you cross a border. The snake is simply cut an rendered separately.
 }
 
 Vector6 :: struct {
