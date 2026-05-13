@@ -116,14 +116,22 @@ resolve_collisions :: () {
         while i >= TAIL_POINTS_SKIPPED {
             defer i -= 2;
 	    tail_wraps := Vector2.{floor(snake.tail[i].x/WINDOW_WIDTH),floor(snake.tail[i].y/WINDOW_HEIGHT)};
-	    
-            adjusted_tail := adjust_wraps(snake.tail[i],tail_wraps);
-	    adjusted_head := adjust_wraps(snake.head,snake_head_wraps);
+	    new_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
+            adjusted_tail := apply_wraps(snake.tail[i],tail_wraps);
+	    adjusted_head := apply_wraps(snake.head,snake_head_wraps);
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
-            hit,point,normal := constraint_away_distance_data(cycle(snake.head),cycle(adjusted_tail),HEAD_SIZE*scale + HEAD_SIZE);
+	    offset := snake.head;
+            hit,point,normal := constraint_away_distance_data(cycle(snake.head),cycle(snake.tail[i]),HEAD_SIZE*scale + HEAD_SIZE);
 
             if hit {
-		snake.head = adjust_wraps(clamp_to_screen(point),snake_head_wraps);
+		//point = (apply_wraps(point,snake_head_wraps));
+		print("Pre point: %\n",point);
+		new_wraps := Vector2.{floor(point.x/WINDOW_WIDTH),floor(point.y/WINDOW_HEIGHT)};
+		point = apply_wraps(point,new_head_wraps);
+		print("Point: %, head: %, wraps: %, WIDHT: %, new_wraps: %\n",point,snake.head,snake_head_wraps,WINDOW_WIDTH,new_wraps);
+		print("% floor = %\n",point.x/WINDOW_WIDTH,ceil(point.x/WINDOW_WIDTH));
+		//snake.head = apply_wraps(clamp_te_screen(point),snake_head_wraps);
+		snake.head = point;
                 normal_accum += normal;
                 hit_count += 1;
             }
@@ -136,7 +144,7 @@ resolve_collisions :: () {
             }
         }
     }
-return;
+
     //Collision of the *HEAD* with *PICKUPS*
     for #v2 < pickup,i : pickups {
         if check_circle_collision(cycle(snake.head),HEAD_SIZE,cycle(pickup.point),pickup.radius) {
@@ -150,7 +158,7 @@ return;
         normal_accum : Vector2;
         hit_count : int;
         for *obstacle,j : obstacles {
-            adjusted_obstacle := adjust_wraps(obstacle.point,snake_head_wraps);
+            adjusted_obstacle := apply_wraps(obstacle.point,snake_head_wraps);
 
             result, pos, dir := constraint_circle_aabb_collision(snake.head,HEAD_SIZE,adjusted_obstacle,Vector2.{1,1}*WALL_SIZE*2);
             if result {
@@ -213,7 +221,7 @@ return;
 
                     for collider : collision_grid[adjust_x][adjust_y] {
                         tail_wraps := Vector2.{floor(collider.point.x/WINDOW_WIDTH),floor(collider.point.y/WINDOW_HEIGHT)};
-                        adjusted_obstacle := adjust_wraps(obstacle.point,tail_wraps);
+                        adjusted_obstacle := apply_wraps(obstacle.point,tail_wraps);
                         //if collider.type != Collider_Type.TAIL then continue;
                         dist := distance(collider.point,adjusted_obstacle);
                         if dist > WALL_SIZE*2 then continue;
@@ -232,7 +240,7 @@ return;
             for j : 0..snake.tail.count-1 {
                 scale : float = 1.0 - (cast(float)j / (snake.tail.count*TAIL_END_CUTOFF_MULT-1));
                 tail_wraps := Vector2.{floor(snake.tail[j].x/WINDOW_WIDTH),floor(snake.tail[j].y/WINDOW_HEIGHT)};
-                adjusted_obstacle := adjust_wraps(obstacle.point,tail_wraps);
+                adjusted_obstacle := apply_wraps(obstacle.point,tail_wraps);
                 //if collider.type != Collider_Type.TAIL then continue;
 
                 dist := distance(snake.tail[j],adjusted_obstacle);

@@ -11,7 +11,7 @@ WINDOW_HEIGHT : float= 0;
 
 CENTER_POINT : Vector2;
 SHADOW_OFFSET : Vector2 = .{0,5};
-RENDER_SHADOWS :: true;
+RENDER_SHADOWS :: false;
 //CENTER_POINT :: Vector2.{0,0};
 H_PADDING :: 16.0;
 V_PADDING :: 21.0;
@@ -548,7 +548,7 @@ get_available_particles_system :: (particle_system_pool : [..]*Particles_Emitter
 
 teleport_head :: (position : Vector2) {
     snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
-    snake.head = adjust_wraps(cycle(position),snake_head_wraps);    
+    snake.head = apply_wraps(cycle(position),snake_head_wraps);    
 }
 
 play_sound :: (data: *Sound_Data) {

@@ -1,0 +1,1 @@
+((nil . ((compile-command . "jai main.jai -x64 && snake.exe"))))
