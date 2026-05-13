@@ -1,6 +1,8 @@
 [] Add a trail particle effect on the snake's tail
 [] Fix jumping effect on tail
-[] Fix jumping collision detection
+[] Fix jumping collision detections
 [] Add behaviour to frogs
 [] Improve sprites
-[] Fix tail cuts (Seems to be always count = 0)
+[x] Fix tail cuts (Seems to be always count = 0)
+[] Create a shader only for shadows
+[] Fix when circling around a corner the snake teleports (BUG) This actually happens when you collide with your tail(and don't die) you get pushed around and then teleported

@@ -48,6 +48,7 @@ point_to_grid :: (point : Vector2) -> int,int {
 }
 
 resolve_collisions :: () {
+
     //Update collision grid:
     reset_collision_grid();
 
@@ -78,8 +79,7 @@ resolve_collisions :: () {
     //Collision with the head and the tail
 
 
-    snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)}
-;
+    snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
 
     if false
     {//Collision head with tail OPTIMIZED using Grid
@@ -115,12 +115,15 @@ resolve_collisions :: () {
         i := snake.tail.count-1;
         while i >= TAIL_POINTS_SKIPPED {
             defer i -= 2;
-            adjusted_tail := adjust_wraps(snake.tail[i],snake_head_wraps);
+	    tail_wraps := Vector2.{floor(snake.tail[i].x/WINDOW_WIDTH),floor(snake.tail[i].y/WINDOW_HEIGHT)};
+	    
+            adjusted_tail := adjust_wraps(snake.tail[i],tail_wraps);
+	    adjusted_head := adjust_wraps(snake.head,snake_head_wraps);
             scale : float = 1.0 - (cast(float)i / (snake.tail.count));
             hit,point,normal := constraint_away_distance_data(cycle(snake.head),cycle(adjusted_tail),HEAD_SIZE*scale + HEAD_SIZE);
 
             if hit {
-                snake.head = adjust_wraps(point,snake_head_wraps);
+		snake.head = adjust_wraps(clamp_to_screen(point),snake_head_wraps);
                 normal_accum += normal;
                 hit_count += 1;
             }
@@ -128,13 +131,12 @@ resolve_collisions :: () {
         if hit_count > 0 {
             normal := normalize(normal_accum / cast(float)hit_count);
             dot := dot_product(normal,normalize(direction));
-            //print("\nNormal DOD: %, Direction: %, Dot: %",normal,direction,dot);// nocheckin
             if dot > 0.99 {
                 kill();
             }
         }
     }
-
+return;
     //Collision of the *HEAD* with *PICKUPS*
     for #v2 < pickup,i : pickups {
         if check_circle_collision(cycle(snake.head),HEAD_SIZE,cycle(pickup.point),pickup.radius) {

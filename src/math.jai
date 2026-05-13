@@ -39,6 +39,21 @@ adjust_wraps :: (point : Vector2, wrap_count : Vector2) -> Vector2 {
     return point + .{WINDOW_WIDTH,WINDOW_HEIGHT}*wrap_count;
 }
 
+clamp_to_screen :: (point : Vector2) -> Vector2{
+    return .{clamp(point.x,0.0,WINDOW_WIDTH-1),clamp(point.y,0.0,WINDOW_HEIGHT-1)};
+}
+
+wrap :: (point: Vector2) -> Vector2 {
+    return .{
+        point.x - floor(point.x / WINDOW_WIDTH)  * WINDOW_WIDTH,
+        point.y - floor(point.y / WINDOW_HEIGHT) * WINDOW_HEIGHT
+    };
+}
+
+calculate_wraps :: (point : Vector2) -> Vector2 {
+    return .{floor(point.x/WINDOW_WIDTH),floor(point.y/WINDOW_HEIGHT)};
+}
+
 floor_vector2 :: (v : Vector2) -> Vector2 {
     return .{floor(v.x),floor(v.y)};
 }

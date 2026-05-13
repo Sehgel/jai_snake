@@ -10,15 +10,18 @@ WINDOW_HEIGHT : float= 0;
 //WINDOW_WIDTH  :: WINDOW_HEIGHT;
 
 CENTER_POINT : Vector2;
+SHADOW_OFFSET : Vector2 = .{0,5};
+RENDER_SHADOWS :: true;
 //CENTER_POINT :: Vector2.{0,0};
-PADDING :: 10.0;
+H_PADDING :: 16.0;
+V_PADDING :: 21.0;
 
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.05;
 DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
 DIGEST_TIME :: 0.75;
-TAIL_REPEAT_FACTOR :: 4.0;
+TAIL_REPEAT_FACTOR :: 16.0;
 
 HEAD_SIZE : float = 12;
 PICKUP_RADIUS : float = 8;
@@ -53,9 +56,9 @@ key_pause : KeyState;
 key_debug : KeyState;
 
 snake : Snake;
-tummy_bloats : [10]Vector3;
-tummy_counters : [10]float;
 pickups : [..]Pickup;
+tummy_counters : [10]float;
+tummy_bloats : [10]Vector3;
 obstacles : [..]Obstacle;
 map_details : [..]MapDetail;
 
@@ -87,10 +90,11 @@ digesting : [..]Digestion;
 tail_VBO : u32;
 tail_VAO : u32;
 tail_shader : GLuint;
+tail_shadow_shader : GLuint;
 tail_texture : u32;
 
 sprite_shader : GLuint;
-
+shadow_shader : GLuint;
 
 head_VAO : u32;
 head_VBO : u32;
@@ -184,7 +188,7 @@ main :: () {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 8);
     glEnable(GL_MULTISAMPLE);
     //VSync?
-//    if OS == .WINDOWS wglSwapIntervalEXT(1);
+    if OS == .WINDOWS wglSwapIntervalEXT(1);
 
     quit := false;
     while main := !quit {
@@ -419,8 +423,8 @@ generate_map_details :: () {
 
             if random_get_within_range(0,100) > 75 {
                 pos := Vector2.{xx (i*(WALL_SIZE*2) + WALL_SIZE),xx (j*(WALL_SIZE*2) + WALL_SIZE)};
-                pos.x += PADDING;
-                pos.y += PADDING;
+                pos.x += H_PADDING;
+                pos.y += V_PADDING;
                 array_add(*map_details,MapDetail.{pos,xx
                 random_get_within_range(40,43)});
             }
@@ -442,8 +446,8 @@ generate_walls :: () {
 
             if random_get_within_range(0,100) > 97 {
                 pos := Vector2.{xx (i*(WALL_SIZE*2) + WALL_SIZE),xx (j*(WALL_SIZE*2) + WALL_SIZE)};
-                pos.x += PADDING;
-                pos.y += PADDING;
+                pos.x += H_PADDING;
+                pos.y += V_PADDING;
                 array_add(*obstacles,Obstacle.{pos,WALL_SIZE});
             }
         }
@@ -451,7 +455,7 @@ generate_walls :: () {
 }
 
 update_tail_graphic :: () {
-    prev := snake.head;
+    prev := cycle(snake.head);
     last_pc := cycle(snake.head);
     graphics.tail_cuts.count = 0;
 
@@ -466,8 +470,8 @@ update_tail_graphic :: () {
 
         pc := cycle(prev);
 
-        p0 := pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE;
-        p1 := pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE;
+        p0 := (pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE);
+        p1 := (pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE);
 
         if distance(last_pc,pc) >= DISTANCE_BETWEEN_TAIL_POINTS*2 {//10 Is the distance to detect when a snake crossed a border
             //array_add(*graphics.tail_cuts,xx ((i)*2));
@@ -476,7 +480,7 @@ update_tail_graphic :: () {
         }
 
         //uv_y := cast(float)(i/TAIL_REPEAT_FACTOR) / (snake.tail.count/TAIL_REPEAT_FACTOR-1);
-        uv_y := cast(float)(i/TAIL_REPEAT_FACTOR) / (snake.tail.count/TAIL_REPEAT_FACTOR);
+        uv_y := cast(float)(i/TAIL_REPEAT_FACTOR/snake.tail.count) / (snake.tail.count/TAIL_REPEAT_FACTOR/snake.tail.count);
 
         tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
 
@@ -486,6 +490,7 @@ update_tail_graphic :: () {
         prev = snake.tail[i];
         last_pc = pc;
     }
+    
 }
 
 kill :: () {
@@ -947,12 +952,19 @@ destroy_pickup_by_index :: (index : int) {
 
 prepare_render :: () {
     //Shaders
-    sprite_shader = create_shader_program("shaders/sprite/sprite_vertex.glsl","shaders/sprite/sprite_fragment.glsl");
+    sprite_shader = create_shader_program("shaders/sprite/sprite_vertex.glsl","shaders/sprite/sprite_fragment.glsl")
+    ;
+    shadow_shader = create_shader_program("shaders/sprite/shadow_vertex.glsl","shaders/sprite/shadow_fragment.glsl");
+    
     tail_shader = create_shader_program("shaders/tail/tail_vertex.glsl","shaders/tail/tail_fragment.glsl");
+    
+    tail_shadow_shader = create_shader_program("shaders/tail/tail_shadow_vertex.glsl","shaders/tail/tail_shadow_fragment.glsl");
+    
 
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
 
     //**********************************
@@ -1045,7 +1057,7 @@ render :: () {
     if error != GL_NO_ERROR then
         print("\nOpenGL Error: 0x0%",formatInt(error,16));
 
-    glViewport(xx -(PADDING),xx -(PADDING),xx (WINDOW_WIDTH+PADDING*2),xx (WINDOW_HEIGHT+PADDING*2));
+    glViewport(xx -(H_PADDING),xx -(V_PADDING),xx (WINDOW_WIDTH+H_PADDING*2),xx (WINDOW_HEIGHT+V_PADDING*2));
 
     update_tail_graphic();
 
@@ -1061,6 +1073,13 @@ render :: () {
     sprite_tint_location       := glGetUniformLocation(sprite_shader, "tint");
     sprite_uv_size_location       := glGetUniformLocation(sprite_shader, "uv_size");
     sprite_uv_offset_location       := glGetUniformLocation(sprite_shader, "uv_offset");
+
+    shadow_model_location      := glGetUniformLocation(shadow_shader, "model");
+    shadow_view_location       := glGetUniformLocation(shadow_shader, "view");
+    shadow_projection_location := glGetUniformLocation(shadow_shader, "projection");
+    shadow_tint_location       := glGetUniformLocation(shadow_shader, "tint");
+    shadow_uv_size_location       := glGetUniformLocation(shadow_shader, "uv_size");
+    shadow_uv_offset_location       := glGetUniformLocation(shadow_shader, "uv_offset");
 
     //View
     view := Matrix4_Identity;
@@ -1085,7 +1104,7 @@ render :: () {
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *detail_model);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform4f(sprite_tint_location, 1,1,1,1);
         glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);//@TODO: CHANGE head_VBO to sprites_VBO
 
@@ -1112,7 +1131,7 @@ render :: () {
             glBindVertexArray(head_VAO);
             glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
             glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-            glUniform3f(sprite_tint_location, 1,1,1);
+            glUniform4f(sprite_tint_location, 1,1,1,1);
             glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
             glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
 
@@ -1150,7 +1169,7 @@ render :: () {
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *obstacle_model);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform4f(sprite_tint_location, 1,1,1,1);
         glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glBindBuffer(GL_ARRAY_BUFFER,head_VBO);//@TODO: CHANGE head_VBO to sprites_VBO
 
@@ -1170,6 +1189,28 @@ render :: () {
     //****************
     //Drawing Tailtip
     //****************
+    //Shadow
+    if RENDER_SHADOWS{
+        tail_direction := normalize(snake.tail[snake.tail.count-3]-snake.tail[snake.tail.count-2]);
+        angle := angle_between(.{0,-1},tail_direction);
+        tail_tip_rotation : Quaternion;
+        set_from_axis_and_angle(*tail_tip_rotation,.{0,0,1},xx angle);
+        head_model :=  translate(Matrix4_Identity,cycle3(snake.tail[snake.tail.count-2]+SHADOW_OFFSET)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2.25)  * rotate(Matrix4_Identity,tail_tip_rotation);
+
+        glBindVertexArray(head_VAO);
+        glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
+        glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform4f(sprite_tint_location, 0,0,0,0.5);
+
+        uv_offset := get_atlas_uv_offset(xx 19);
+        glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(sprite_uv_offset_location,uv_offset.x,uv_offset.y);
+        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+        //glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+    }
     //Model
     {
         tail_direction := normalize(snake.tail[snake.tail.count-3]-snake.tail[snake.tail.count-2]);
@@ -1182,7 +1223,7 @@ render :: () {
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform4f(sprite_tint_location, 1,1,1,1);
 
         uv_offset := get_atlas_uv_offset(xx 19);
         glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
@@ -1196,7 +1237,27 @@ render :: () {
     //****************
     //Drawing Under Head
     //****************
-    //Model
+    //SHADOW
+    glUseProgram(shadow_shader);
+    if RENDER_SHADOWS{//TODO: Seems to be buggy on wait screen on start
+        head_model :=  translate(Matrix4_Identity,cycle3(snake.head + SHADOW_OFFSET)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
+
+
+        glBindVertexArray(head_VAO);
+        glUniformMatrix4fv(shadow_model_location     , 1, GL_TRUE, xx *head_model);
+        glUniformMatrix4fv(shadow_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(shadow_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform4f(shadow_tint_location, 0,0,0,0.5);
+
+        uv_offset := get_atlas_uv_offset(xx 3);
+        glUniform2f(shadow_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(shadow_uv_offset_location,uv_offset.x,uv_offset.y);
+        glBindBuffer(GL_ARRAY_BUFFER,head_VBO);
+        //glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+        glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
+    }
+    glUseProgram(sprite_shader);
     {//TODO: Seems to be buggy on wait screen on start
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
 
@@ -1205,7 +1266,7 @@ render :: () {
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform4f(sprite_tint_location, 1,1,1,1);
 
         uv_offset := get_atlas_uv_offset(xx 3);
         glUniform2f(sprite_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
@@ -1220,8 +1281,44 @@ render :: () {
     //****************
     //Drawing Tail
     //****************
+    
+    glUseProgram(tail_shadow_shader);
+    if RENDER_SHADOWS{//TAIL SHADOW
+        glBindVertexArray(tail_VAO);
+        tail_model_location      := glGetUniformLocation(tail_shadow_shader, "model");
+        tail_view_location       := glGetUniformLocation(tail_shadow_shader, "view");
+        tail_projection_location := glGetUniformLocation(tail_shadow_shader, "projection");
+        tail_tint_location       := glGetUniformLocation(tail_shadow_shader, "tint");
+        tail_uv_size_location       := glGetUniformLocation(tail_shadow_shader, "uv_size");
+        tail_uv_offset_location       := glGetUniformLocation(tail_shadow_shader, "uv_offset");
+        tail_tummy_bloats_location       := glGetUniformLocation(tail_shadow_shader, "tummy_bloats");
+	tail_shadow_offset_location       := glGetUniformLocation(tail_shadow_shader, "offset");
+
+        //tail_model := (scale(Matrix4_Identity,Vector3.{1,1,1}*(snake.height+1.0)) * translate(Matrix4_Identity,-cycle3(snake.head))) + translate(Matrix4_Identity,cycle3(snake.head));
+        tail_model := Matrix4_Identity;
+        glUniformMatrix4fv(tail_model_location     , 1, GL_TRUE, xx *tail_model);
+        glUniformMatrix4fv(tail_view_location      , 1, GL_TRUE, xx *view);
+        glUniformMatrix4fv(tail_projection_location, 1, GL_TRUE, xx *projection);
+        glUniform4f(tail_tint_location, 0,0,0,0.5);
+        glUniform3fv(tail_tummy_bloats_location,xx tummy_bloats.count,xx *tummy_bloats);
+        uv_offset := get_atlas_uv_offset(10);
+        glUniform2f(tail_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
+        glUniform2f(tail_uv_offset_location,uv_offset.x,uv_offset.y);
+	glUniform2f(tail_shadow_offset_location,SHADOW_OFFSET.x,SHADOW_OFFSET.y);
+        glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+        glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
+        glBufferSubData(GL_ARRAY_BUFFER,0,6*graphics.tail.count*size_of(float),graphics.tail.data);
+
+        start : s32 = 0;
+        for #v2 < cut : graphics.tail_cuts {
+            glDrawArrays(GL_TRIANGLE_STRIP,start,xx (cut-start));
+            start = cut;
+        }
+        glDrawArrays(GL_TRIANGLE_STRIP,start, xx (graphics.tail.count-start));
+    }
+
     glUseProgram(tail_shader);
-    {
+    if true{//ACTUAL TAIL
         glBindVertexArray(tail_VAO);
         tail_model_location      := glGetUniformLocation(tail_shader, "model");
         tail_view_location       := glGetUniformLocation(tail_shader, "view");
@@ -1230,17 +1327,18 @@ render :: () {
         tail_uv_size_location       := glGetUniformLocation(tail_shader, "uv_size");
         tail_uv_offset_location       := glGetUniformLocation(tail_shader, "uv_offset");
         tail_tummy_bloats_location       := glGetUniformLocation(tail_shader, "tummy_bloats");
-
+	tail_shadow_offset_location       := glGetUniformLocation(tail_shader, "offset");
         //tail_model := (scale(Matrix4_Identity,Vector3.{1,1,1}*(snake.height+1.0)) * translate(Matrix4_Identity,-cycle3(snake.head))) + translate(Matrix4_Identity,cycle3(snake.head));
         tail_model := Matrix4_Identity;
         glUniformMatrix4fv(tail_model_location     , 1, GL_TRUE, xx *tail_model);
         glUniformMatrix4fv(tail_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(tail_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(tail_tint_location, 1,1,1);
+        glUniform4f(tail_tint_location, 1,1,1,1);
         glUniform3fv(tail_tummy_bloats_location,xx tummy_bloats.count,xx *tummy_bloats);
         uv_offset := get_atlas_uv_offset(10);
         glUniform2f(tail_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glUniform2f(tail_uv_offset_location,uv_offset.x,uv_offset.y);
+	glUniform2f(tail_shadow_offset_location,0,0);
         glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         glBufferSubData(GL_ARRAY_BUFFER,0,6*graphics.tail.count*size_of(float),graphics.tail.data);
@@ -1267,7 +1365,7 @@ render :: () {
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
         glUniformMatrix4fv(sprite_view_location      , 1, GL_TRUE, xx *view);
         glUniformMatrix4fv(sprite_projection_location, 1, GL_TRUE, xx *projection);
-        glUniform3f(sprite_tint_location, 1,1,1);
+        glUniform4f(sprite_tint_location, 1,1,1,1);
 
         sprite_index := 0;
         if !is_alive {
