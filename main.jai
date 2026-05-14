@@ -13,12 +13,13 @@ CENTER_POINT : Vector2;
 SHADOW_OFFSET : Vector2 = .{0,5};
 RENDER_SHADOWS :: false;
 //CENTER_POINT :: Vector2.{0,0};
+
 H_PADDING :: 16.0;
 V_PADDING :: 21.0;
 
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.05;
-DISTANCE_BETWEEN_TAIL_POINTS :: 5.0;
+DISTANCE_BETWEEN_TAIL_POINTS :: 4.0;
 TAIL_END_CUTOFF_MULT :: 1.5;
 DIGEST_TIME :: 0.75;
 TAIL_REPEAT_FACTOR :: 16.0;
@@ -566,6 +567,7 @@ eat_pickup :: (pickup_index : int) {
     pickup_point := pickups[pickup_index].point;
 
     teleport_head_flag = .{true,teleport_head,pickup_point};
+    //teleport_head(pickup_point);
 
     //Particles
     forward_dir := normalize(direction);
@@ -608,7 +610,7 @@ eat_pickup :: (pickup_index : int) {
 
     calculate_next_pickup_target(*pickups[pickups.count-1]);
     shake_camera(0.2,1.5);
-    //slow_time_for(0.2,0.25);
+    slow_time_for(0.2,0.25);
 
     score += 100;
 }

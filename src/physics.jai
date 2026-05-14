@@ -124,14 +124,7 @@ resolve_collisions :: () {
             hit,point,normal := constraint_away_distance_data(cycle(snake.head),cycle(snake.tail[i]),HEAD_SIZE*scale + HEAD_SIZE);
 
             if hit {
-		//point = (apply_wraps(point,snake_head_wraps));
-		print("Pre point: %\n",point);
-		new_wraps := Vector2.{floor(point.x/WINDOW_WIDTH),floor(point.y/WINDOW_HEIGHT)};
-		point = apply_wraps(point,new_head_wraps);
-		print("Point: %, head: %, wraps: %, WIDHT: %, new_wraps: %\n",point,snake.head,snake_head_wraps,WINDOW_WIDTH,new_wraps);
-		print("% floor = %\n",point.x/WINDOW_WIDTH,ceil(point.x/WINDOW_WIDTH));
-		//snake.head = apply_wraps(clamp_te_screen(point),snake_head_wraps);
-		snake.head = point;
+		snake.head = apply_wraps(point,new_head_wraps);
                 normal_accum += normal;
                 hit_count += 1;
             }

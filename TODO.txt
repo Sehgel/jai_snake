@@ -5,4 +5,8 @@
 [] Improve sprites
 [x] Fix tail cuts (Seems to be always count = 0)
 [] Create a shader only for shadows
-[!] Fix when circling around a corner the snake teleports (BUG) This actually happens when you collide with your tail(and don't die) you get pushed around and then teleported. !It is better now but there's a different bug that has a similar teleport behavihour when in a vertical line on the edge and you touch your tail.
+[!!] Fix when circling around a corner the snake teleports (BUG) This actually happens when you collide with your tail(and don't die) you get pushed around and then teleported. !It is better now but there's a different bug that has a similar teleport behavihour when in a vertical line on the edge and you touch your tail. Now it's better but still a little weird. I think this is the best I can do.
+
+[] Fix bug where the tail is wrapped around a block and then you eat something. The part of the tail that is touching the wall dissapear for a frame.
+
+[] Prevent wall blocks to appear near snake spawn point
