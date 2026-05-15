@@ -14,8 +14,8 @@ SHADOW_OFFSET : Vector2 = .{0,5};
 RENDER_SHADOWS :: false;
 //CENTER_POINT :: Vector2.{0,0};
 
-H_PADDING :: 16.0;
-V_PADDING :: 21.0;
+H_PADDING :: 16.0 ;
+V_PADDING :: 21.0 ;
 
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.05;
@@ -39,7 +39,7 @@ time_slow_counter : float;
 time_slow_time : float;
 
 //DEBUG
-IS_DEBUGGING_GRAPHICS := false;
+IS_DEBUGGING_GRAPHICS := true;
 
 window : Window_Type;
 
@@ -87,15 +87,18 @@ Digestion :: struct {
 
 digesting : [..]Digestion;
 
-
 tail_VBO : u32;
 tail_VAO : u32;
 tail_shader : GLuint;
 tail_shadow_shader : GLuint;
 tail_texture : u32;
 
+lines_VAO : u32;
+lines_VBO : u32;
+
 sprite_shader : GLuint;
 shadow_shader : GLuint;
+lines_shader : GLuint;
 
 head_VAO : u32;
 head_VBO : u32;
@@ -116,6 +119,15 @@ sprite_indices := u32.[
     0,1,2,
     0,2,3
 ];
+
+test_vertices := float.[
+    -0.8,  0.0,   // line 1 start
+    0.8,  0.0,   // line 1 end
+    0.0, -0.8,   // line 2 start
+    0.0,  0.8,   // line 2 end (cross shape)
+];
+
+grid_vertices : [..]float;
 
 SPRITE_ATLAS_SIZE :: 64.0;
 sprite_atlas : *u8;
@@ -408,6 +420,39 @@ init :: () {
         calculate_next_pickup_target(pickup);
 	pickup.counter = -5.0;
     }
+
+    x : float;
+    while x < WINDOW_WIDTH {
+	defer x += WALL_STEP;
+	array_add(*grid_vertices,xx screen_to_ndc(x,xx WINDOW_WIDTH));
+	array_add(*grid_vertices,-WINDOW_HEIGHT);
+
+	array_add(*grid_vertices,xx screen_to_ndc(x,xx WINDOW_WIDTH));
+	array_add(*grid_vertices,WINDOW_HEIGHT);
+    }
+
+    array_add(*grid_vertices, 1.0);
+    array_add(*grid_vertices, -WINDOW_HEIGHT);
+
+    array_add(*grid_vertices, 1.0);
+    array_add(*grid_vertices, WINDOW_HEIGHT);
+
+    y : float;
+    while y < WINDOW_HEIGHT {
+	defer y += WALL_STEP;
+	array_add(*grid_vertices,-WINDOW_WIDTH);
+	array_add(*grid_vertices,xx screen_to_ndc(y,xx WINDOW_HEIGHT));
+
+	array_add(*grid_vertices,WINDOW_WIDTH);
+	array_add(*grid_vertices,xx screen_to_ndc(y,xx WINDOW_HEIGHT));
+    }
+
+    array_add(*grid_vertices, -WINDOW_WIDTH);
+    array_add(*grid_vertices, 1.0);
+
+    array_add(*grid_vertices, WINDOW_WIDTH);
+    array_add(*grid_vertices, 1.0);
+    
     //array_add(*graphics.tail_cuts,50);
     //array_add(*graphics.tail_cuts,100);
 }
@@ -961,8 +1006,9 @@ prepare_render :: () {
     tail_shader = create_shader_program("shaders/tail/tail_vertex.glsl","shaders/tail/tail_fragment.glsl");
     
     tail_shadow_shader = create_shader_program("shaders/tail/tail_shadow_vertex.glsl","shaders/tail/tail_shadow_fragment.glsl");
-    
 
+    lines_shader = create_shader_program("shaders/lines/lines_vertex.glsl","shaders/lines/lines_fragment.glsl");
+    
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1050,7 +1096,18 @@ prepare_render :: () {
 //*****END PREPARE RENDER*****
     //glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
+    //***********************************
+    //**************LINES****************
+    //***********************************
 
+    glGenVertexArrays(1,*lines_VAO);
+    glGenBuffers(1,*lines_VBO);
+    
+    glBindVertexArray(lines_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER,lines_VBO);
+    glBufferData(GL_ARRAY_BUFFER,grid_vertices.count*size_of(float),grid_vertices.data,GL_STATIC_DRAW);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,2*size_of(float),xx 0);
+    glEnableVertexAttribArray(0);
 }
 
 render :: () {
@@ -1067,7 +1124,6 @@ render :: () {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(sprite_shader);
-
     //TODO: @Do this on preprare_render::()
     sprite_model_location      := glGetUniformLocation(sprite_shader, "model");
     sprite_view_location       := glGetUniformLocation(sprite_shader, "view");
@@ -1417,6 +1473,18 @@ render :: () {
     }
 
 
+    if IS_DEBUGGING_GRAPHICS{
+
+	glUseProgram(lines_shader);
+	glBindVertexArray(lines_VAO);
+	//glBindBuffer(GL_ARRAY_BUFFER,lines_VBO);
+	lines_tint_location := glGetUniformLocation(lines_shader, "tint");
+
+	glUniform4f(lines_tint_location,1,0,0,1);
+	glDrawArrays(GL_LINES,0,xx (grid_vertices.count/2));
+    }
+
+
     if false {//RENDER GRID POINTS no checkin
         i : float = 0;
         while i < WINDOW_WIDTH {
@@ -1429,7 +1497,6 @@ render :: () {
             }
         }
 
-        return;
         for obstacle : obstacles {
             o_point := tprint(".");
             render_text(o_point,obstacle.point.x,obstacle.point.y,0.25,.{1,0,0}, *transpose(projection));

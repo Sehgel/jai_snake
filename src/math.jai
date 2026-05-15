@@ -27,6 +27,10 @@ move_towards :: (current : Vector2, target : Vector2, speed : float = 1.0, max_d
     return current + dir*speed / dist * max_delta;
 }
 
+screen_to_ndc :: (x : float, size : float) -> float {
+    return (x / size)  * 2.0 - 1.0;
+}
+
 orthonormalize :: (v : Vector2) -> Vector2 {
     if abs(v.x) > abs(v.y) {
         return .{ifx v.x > 0.0 then 1.0 else -1.0,0};
