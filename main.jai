@@ -14,8 +14,10 @@ SHADOW_OFFSET : Vector2 = .{0,5};
 RENDER_SHADOWS :: false;
 //CENTER_POINT :: Vector2.{0,0};
 
-H_PADDING :: 16.0 ;
-V_PADDING :: 21.0 ;
+//H_PADDING :: 16.0 ;
+//V_PADDING :: 21.0 ;
+H_PADDING :: 16 * -4;
+V_PADDING :: 21 * -4;
 
 TAIL_POINTS_SKIPPED :: 10;
 TAIL_ADD_DELAY :: 0.05;
@@ -39,7 +41,7 @@ time_slow_counter : float;
 time_slow_time : float;
 
 //DEBUG
-IS_DEBUGGING_GRAPHICS := true;
+IS_DEBUGGING_GRAPHICS := false;
 
 window : Window_Type;
 
@@ -393,6 +395,7 @@ init :: () {
     init_text_renderer();
 
     init_particles_renderer();
+
     generate_particles_texture(0,"sprites/blood.png");
     generate_particles_texture(1,"sprites/dust.png");
 
@@ -408,6 +411,7 @@ init :: () {
     //array_reserve(*snake.tail_graphic,snake.tail.allocated*2);
     generate_map_details();
     generate_base_tail();
+    constraint_tail();
     restart_tummy();
 
     is_alive = true;
@@ -421,14 +425,15 @@ init :: () {
 	pickup.counter = -5.0;
     }
 
+    //GENERATE GRID:
     x : float;
     while x < WINDOW_WIDTH {
-	defer x += WALL_STEP;
-	array_add(*grid_vertices,xx screen_to_ndc(x,xx WINDOW_WIDTH));
-	array_add(*grid_vertices,-WINDOW_HEIGHT);
+    	defer x += WALL_STEP;
+    	array_add(*grid_vertices,xx screen_to_ndc(x,xx WINDOW_WIDTH));
+    	array_add(*grid_vertices,-WINDOW_HEIGHT);
 
-	array_add(*grid_vertices,xx screen_to_ndc(x,xx WINDOW_WIDTH));
-	array_add(*grid_vertices,WINDOW_HEIGHT);
+    	array_add(*grid_vertices,xx screen_to_ndc(x,xx WINDOW_WIDTH));
+    	array_add(*grid_vertices,WINDOW_HEIGHT);
     }
 
     array_add(*grid_vertices, 1.0);
@@ -439,12 +444,12 @@ init :: () {
 
     y : float;
     while y < WINDOW_HEIGHT {
-	defer y += WALL_STEP;
-	array_add(*grid_vertices,-WINDOW_WIDTH);
-	array_add(*grid_vertices,xx screen_to_ndc(y,xx WINDOW_HEIGHT));
+    	defer y += WALL_STEP;
+    	array_add(*grid_vertices,-WINDOW_WIDTH);
+    	array_add(*grid_vertices,xx screen_to_ndc(y,xx WINDOW_HEIGHT));
 
-	array_add(*grid_vertices,WINDOW_WIDTH);
-	array_add(*grid_vertices,xx screen_to_ndc(y,xx WINDOW_HEIGHT));
+    	array_add(*grid_vertices,WINDOW_WIDTH);
+    	array_add(*grid_vertices,xx screen_to_ndc(y,xx WINDOW_HEIGHT));
     }
 
     array_add(*grid_vertices, -WINDOW_WIDTH);
@@ -452,7 +457,7 @@ init :: () {
 
     array_add(*grid_vertices, WINDOW_WIDTH);
     array_add(*grid_vertices, 1.0);
-    
+
     //array_add(*graphics.tail_cuts,50);
     //array_add(*graphics.tail_cuts,100);
 }
@@ -500,6 +505,17 @@ generate_walls :: () {
     }
 }
 
+constraint_tail :: () {
+    prev_point := snake.head;
+    for 0..snake.tail.count-1 {
+
+        percentage :=  cast(float)it / snake.tail.count;
+        percentage = ifx percentage < 0.95 then 1.0 else 0.1;
+        snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS/*  * percentage */);
+        prev_point = snake.tail[it];
+    }
+}
+
 update_tail_graphic :: () {
     prev := cycle(snake.head);
     last_pc := cycle(snake.head);
@@ -507,12 +523,13 @@ update_tail_graphic :: () {
 
     for i : 0..snake.tail.count-1 {
         dir_to_last := normalize(prev - snake.tail[i]);
+        //assert(length(dir_to_last) > 0,"Iteration: % failed. tail: %, prev: %\n",i,snake.tail[i],prev);
 
         tail_epsilon := cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1);
         distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
         scale : float = (1.0 - tail_epsilon) * distance_to_raise_point;//1.0 is distance_to_raise_point 0.0 is tail_epsilon
-	scale = clamp(scale,0.25,1.0);
-	scale = ease_out_n(scale,1.25);
+    	scale = clamp(scale,0.25,1.0);
+    	scale = ease_out_n(scale,1.25);
 
         pc := cycle(prev);
 
@@ -521,7 +538,8 @@ update_tail_graphic :: () {
 
         if distance(last_pc,pc) >= DISTANCE_BETWEEN_TAIL_POINTS*2 {//10 Is the distance to detect when a snake crossed a border
             //array_add(*graphics.tail_cuts,xx ((i)*2));
-            cut := (graphics.tail.count-1) - (i*2) + 1;
+            cut := (graphics.tail.count-1) - ((i-0)*2) + 1;
+            cut = clamp(cut,0,(graphics.tail.count));
             array_add(*graphics.tail_cuts,xx cut);
         }
 
@@ -530,13 +548,33 @@ update_tail_graphic :: () {
 
         tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
 
-        graphics.tail[(graphics.tail.count-1) - (i*2)]     = .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
-        graphics.tail[(graphics.tail.count-1) - ((i*2)+1)] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
+        pair := (graphics.tail.count-1) - (i*2);
+        odd :=  (graphics.tail.count-1) - ((i*2) + 1);
+
+        graphics.tail[pair]= .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
+        graphics.tail[odd] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
 
         prev = snake.tail[i];
         last_pc = pc;
     }
-    
+    return;
+    //Add extra length to the tails ends to account for the borders
+    for i : 0..graphics.tail_cuts.count-1 {
+    	index := graphics.tail_cuts[i];
+
+    	current := Vector2.{graphics.tail[index].x,graphics.tail[index].y};
+
+    	if index-1 < 0 then
+    	continue;
+
+    	prev := Vector2.{graphics.tail[index-1].x,graphics.tail[index-1].y};
+    	direction := normalize(current - prev);
+
+    	//graphics.tail[index].x += direction.x * 50;
+    	//graphics.tail[index].y += direction.y * 50;
+    	//graphics.tail[index+1].x += direction.x * 50;
+    	//graphics.tail[index+1].y += direction.y * 50;
+    }
 }
 
 kill :: () {
@@ -594,7 +632,7 @@ get_available_particles_system :: (particle_system_pool : [..]*Particles_Emitter
 
 teleport_head :: (position : Vector2) {
     snake_head_wraps := Vector2.{floor(snake.head.x/WINDOW_WIDTH),floor(snake.head.y/WINDOW_HEIGHT)};
-    snake.head = apply_wraps(cycle(position),snake_head_wraps);    
+    snake.head = apply_wraps(cycle(position),snake_head_wraps);
 }
 
 play_sound :: (data: *Sound_Data) {
@@ -655,7 +693,7 @@ eat_pickup :: (pickup_index : int) {
 
     calculate_next_pickup_target(*pickups[pickups.count-1]);
     shake_camera(0.2,1.5);
-    slow_time_for(0.2,0.25);
+    //slow_time_for(0.2,0.25); !revert
 
     score += 100;
 }
@@ -689,21 +727,14 @@ restart_game :: () {
 
 restart_tummy :: () {
     for i : 0..tummy_bloats.count-1 {
-        tummy_bloats[i] = .{0.0,0.0,0.0};
+        tummy_bloats[i] = .{};
         tummy_counters[i] = 9.0;
     }
 }
 
 generate_base_tail :: () {
     for 0..25 {
-        add_to_tail(CENTER_POINT-Vector2.{(it)*DISTANCE_BETWEEN_TAIL_POINTS,0});
-    }
-    prev_point := snake.head;
-
-    //Constraint
-    for 0..snake.tail.count-1 {
-            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS);
-            prev_point = snake.tail[it];
+        add_to_tail(CENTER_POINT-Vector2.{(it+1)*DISTANCE_BETWEEN_TAIL_POINTS,0});
     }
 }
 
@@ -752,7 +783,7 @@ process_input :: () {
 
     //print("\nKey: pressed: %,awaits: %",key_return.was_just_pressed,key_return.awaits_reset);
     if key_slow_mo.was_just_pressed {
-        time_scale = ifx time_scale == 1.0 then 0.1 else 1.0;
+        time_scale = ifx time_scale == 1.0 then 0.01 else 1.0;
     }
 
     if key_pause.was_just_pressed {
@@ -816,14 +847,7 @@ simulate :: () {
 
     //Move body
     if is_started {
-        prev_point := snake.head;
-        for 0..snake.tail.count-1 {
-
-            percentage :=  cast(float)it / snake.tail.count;
-            percentage = ifx percentage < 0.95 then 1.0 else 0.1;
-            snake.tail[it] = constraint_distance(snake.tail[it],prev_point,DISTANCE_BETWEEN_TAIL_POINTS/*  * percentage */);
-            prev_point = snake.tail[it];
-        }
+        constraint_tail();
     }
 
     //Update pickups
@@ -1002,13 +1026,13 @@ prepare_render :: () {
     sprite_shader = create_shader_program("shaders/sprite/sprite_vertex.glsl","shaders/sprite/sprite_fragment.glsl")
     ;
     shadow_shader = create_shader_program("shaders/sprite/shadow_vertex.glsl","shaders/sprite/shadow_fragment.glsl");
-    
+
     tail_shader = create_shader_program("shaders/tail/tail_vertex.glsl","shaders/tail/tail_fragment.glsl");
-    
+
     tail_shadow_shader = create_shader_program("shaders/tail/tail_shadow_vertex.glsl","shaders/tail/tail_shadow_fragment.glsl");
 
     lines_shader = create_shader_program("shaders/lines/lines_vertex.glsl","shaders/lines/lines_fragment.glsl");
-    
+
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1055,7 +1079,7 @@ prepare_render :: () {
     //VAO
     glGenVertexArrays(1,*tail_VAO);
     glBindVertexArray(tail_VAO);
-    
+
     //Vertex Pointers
     glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,6*size_of(float),xx 0);
     glEnableVertexAttribArray(0);
@@ -1102,7 +1126,7 @@ prepare_render :: () {
 
     glGenVertexArrays(1,*lines_VAO);
     glGenBuffers(1,*lines_VBO);
-    
+
     glBindVertexArray(lines_VAO);
     glBindBuffer(GL_ARRAY_BUFFER,lines_VBO);
     glBufferData(GL_ARRAY_BUFFER,grid_vertices.count*size_of(float),grid_vertices.data,GL_STATIC_DRAW);
@@ -1180,7 +1204,7 @@ render :: () {
     //****************
     //Drawing Pickups
     //****************
-    
+
 	pickup_rotation : Quaternion;
 	for pickup : pickups {
             dir := ifx pickup.point.x < pickup.target.x then 1.0 else -1.0;
@@ -1216,7 +1240,7 @@ render :: () {
             glBindBuffer(GL_ARRAY_BUFFER,0);
             glBindTexture(GL_TEXTURE_2D,0);
 	}
-    
+
     //****************
     //Drawing Obstacles
     //****************
@@ -1316,7 +1340,7 @@ render :: () {
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
     }
     glUseProgram(sprite_shader);
-    {//TODO: Seems to be buggy on wait screen on start
+    if false{//TODO: Seems to be buggy on wait screen on start
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
 
 
@@ -1339,7 +1363,7 @@ render :: () {
     //****************
     //Drawing Tail
     //****************
-    
+
     glUseProgram(tail_shadow_shader);
     if RENDER_SHADOWS{//TAIL SHADOW
         glBindVertexArray(tail_VAO);
@@ -1376,7 +1400,7 @@ render :: () {
     }
 
     glUseProgram(tail_shader);
-    if true{//ACTUAL TAIL
+    {//ACTUAL TAIL
         glBindVertexArray(tail_VAO);
         tail_model_location      := glGetUniformLocation(tail_shader, "model");
         tail_view_location       := glGetUniformLocation(tail_shader, "view");
@@ -1413,7 +1437,7 @@ render :: () {
     //Drawing Head
     //****************
     glUseProgram(sprite_shader);
-    {
+    if false{
         angle := angle_between(.{0,-1}, direction);
         set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2 * (snake.height+1)) * rotate(Matrix4_Identity,head_rotation);
@@ -1474,14 +1498,13 @@ render :: () {
 
 
     if IS_DEBUGGING_GRAPHICS{
+    	glUseProgram(lines_shader);
+    	glBindVertexArray(lines_VAO);
+    	//glBindBuffer(GL_ARRAY_BUFFER,lines_VBO);
+    	lines_tint_location := glGetUniformLocation(lines_shader, "tint");
 
-	glUseProgram(lines_shader);
-	glBindVertexArray(lines_VAO);
-	//glBindBuffer(GL_ARRAY_BUFFER,lines_VBO);
-	lines_tint_location := glGetUniformLocation(lines_shader, "tint");
-
-	glUniform4f(lines_tint_location,1,0,0,1);
-	glDrawArrays(GL_LINES,0,xx (grid_vertices.count/2));
+    	glUniform4f(lines_tint_location,1,0,0,1);
+    	glDrawArrays(GL_LINES,0,xx (grid_vertices.count/2));
     }
 
 
