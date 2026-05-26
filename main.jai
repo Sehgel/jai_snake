@@ -517,13 +517,12 @@ constraint_tail :: () {
 }
 
 update_tail_graphic :: () {
-    prev := cycle(snake.head);
-    last_pc := cycle(snake.head);
+    prev := snake.head;
     graphics.tail_cuts.count = 0;
 
     for i : 0..snake.tail.count-1 {
         dir_to_last := normalize(prev - snake.tail[i]);
-        //assert(length(dir_to_last) > 0,"Iteration: % failed. tail: %, prev: %\n",i,snake.tail[i],prev);
+        assert(length(dir_to_last) > 0,"Iteration: % failed. tail: %, prev: %\n",i,snake.tail[i],prev);
 
         tail_epsilon := cast(float)(i) / (snake.tail.count*TAIL_END_CUTOFF_MULT-1);
         distance_to_raise_point := abs((1.0 - snake.jump_counter) - tail_epsilon);
@@ -531,16 +530,14 @@ update_tail_graphic :: () {
     	scale = clamp(scale,0.25,1.0);
     	scale = ease_out_n(scale,1.25);
 
-        pc := cycle(prev);
+        current := cycle(snake.tail[i]);
 
-        p0 := (pc + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE);
-        p1 := (pc + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE);
+        p0 := (current + rotate(dir_to_last, TAU/4.0)*scale*HEAD_SIZE);
+        p1 := (current + rotate(dir_to_last,-TAU/4.0)*scale*HEAD_SIZE);
 
-        if distance(last_pc,pc) >= DISTANCE_BETWEEN_TAIL_POINTS*2 {//10 Is the distance to detect when a snake crossed a border
-            //array_add(*graphics.tail_cuts,xx ((i)*2));
-            cut := (graphics.tail.count-1) - ((i-0)*2) + 1;
-            cut = clamp(cut,0,(graphics.tail.count));
-            array_add(*graphics.tail_cuts,xx cut);
+        if distance(current,cycle(prev)) >= DISTANCE_BETWEEN_TAIL_POINTS*10 {//the distance to detect when a snake crossed a border
+            cut := (graphics.tail.count-1) - (i*2) + 1;
+            array_add(*graphics.tail_cuts,xx (cut));
         }
 
         //uv_y := cast(float)(i/TAIL_REPEAT_FACTOR) / (snake.tail.count/TAIL_REPEAT_FACTOR-1);
@@ -548,16 +545,15 @@ update_tail_graphic :: () {
 
         tail_percentage := 1.0 - (cast(float)i / snake.tail.count);
 
-        pair := (graphics.tail.count-1) - (i*2);
-        odd :=  (graphics.tail.count-1) - ((i*2) + 1);
+        inversed_pair := (graphics.tail.count-1) - (i*2);
+        inversed_odd  := (graphics.tail.count-1) - ((i*2) + 1);
 
-        graphics.tail[pair]= .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
-        graphics.tail[odd] = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
+        graphics.tail[inversed_pair] = .{p0.x,p0.y,0.0,uv_y,tail_percentage,snake.height+1.0};
+        graphics.tail[inversed_odd]  = .{p1.x,p1.y,1.0,uv_y,tail_percentage,snake.height+1.0};
 
-        prev = snake.tail[i];
-        last_pc = pc;
+        prev = (snake.tail[i]);
     }
-    return;
+    return;//REMOVE
     //Add extra length to the tails ends to account for the borders
     for i : 0..graphics.tail_cuts.count-1 {
     	index := graphics.tail_cuts[i];
@@ -938,10 +934,11 @@ add_to_tail :: (count : int = 1) {
     old_tail_count : int = snake.tail.count;
     for 0..count {
         dir := ifx snake.tail.count > 1 then normalize(snake.tail[snake.tail.count-1] - snake.tail[snake.tail.count-2]) else -direction;
-
-        point := snake.tail[snake.tail.count-1] + dir*DISTANCE_BETWEEN_TAIL_POINTS*0.5;
+        dir = rotate(dir, random_get_within_range(-1.0,1.0)* TAU*0.075);
+        point := snake.tail[snake.tail.count-1] + dir*DISTANCE_BETWEEN_TAIL_POINTS;
         array_add(*snake.tail, point);
 
+        //Safeguard
         array_add(*graphics.tail, .{point.x,point.y,0,0,1,1});
         array_add(*graphics.tail, .{point.x,point.y,1,0,1,1});
     }
@@ -949,14 +946,16 @@ add_to_tail :: (count : int = 1) {
     recalculate_tummy_bloats(old_tail_count);
     glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
     glBufferData(GL_ARRAY_BUFFER,6*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
-
 }
 
 add_to_tail :: (pos : Vector2) {
+    old_tail_count : int = snake.tail.count;
     array_add(*snake.tail, pos);
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
     array_add(*graphics.tail, .{pos.x,pos.y,0,0,0,1});
-    //recalculate_tummy_bloats();
+    recalculate_tummy_bloats(old_tail_count);
+    glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
+    glBufferData(GL_ARRAY_BUFFER,6*graphics.tail.count*size_of(float),graphics.tail.data,GL_DYNAMIC_DRAW);
 }
 
 //Important
@@ -1321,7 +1320,7 @@ render :: () {
     //****************
     //SHADOW
     glUseProgram(shadow_shader);
-    if RENDER_SHADOWS{//TODO: Seems to be buggy on wait screen on start
+    if RENDER_SHADOWS{
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head + SHADOW_OFFSET)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
 
 
@@ -1340,9 +1339,8 @@ render :: () {
         glDrawElements(GL_TRIANGLES, xx sprite_indices.count, GL_UNSIGNED_INT, null);
     }
     glUseProgram(sprite_shader);
-    if false{//TODO: Seems to be buggy on wait screen on start
+    {
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2);
-
 
         glBindVertexArray(head_VAO);
         glUniformMatrix4fv(sprite_model_location     , 1, GL_TRUE, xx *head_model);
@@ -1409,7 +1407,7 @@ render :: () {
         tail_uv_size_location       := glGetUniformLocation(tail_shader, "uv_size");
         tail_uv_offset_location       := glGetUniformLocation(tail_shader, "uv_offset");
         tail_tummy_bloats_location       := glGetUniformLocation(tail_shader, "tummy_bloats");
-	tail_shadow_offset_location       := glGetUniformLocation(tail_shader, "offset");
+        tail_shadow_offset_location       := glGetUniformLocation(tail_shader, "offset");
         //tail_model := (scale(Matrix4_Identity,Vector3.{1,1,1}*(snake.height+1.0)) * translate(Matrix4_Identity,-cycle3(snake.head))) + translate(Matrix4_Identity,cycle3(snake.head));
         tail_model := Matrix4_Identity;
         glUniformMatrix4fv(tail_model_location     , 1, GL_TRUE, xx *tail_model);
@@ -1420,24 +1418,24 @@ render :: () {
         uv_offset := get_atlas_uv_offset(10);
         glUniform2f(tail_uv_size_location,sprite_atlas_uv_size.x,sprite_atlas_uv_size.y);
         glUniform2f(tail_uv_offset_location,uv_offset.x,uv_offset.y);
-	glUniform2f(tail_shadow_offset_location,0,0);
+        glUniform2f(tail_shadow_offset_location,0,0);
         glBindBuffer(GL_ARRAY_BUFFER,tail_VBO);
         glBindTexture(GL_TEXTURE_2D, sprite_atlas_texture);
         glBufferSubData(GL_ARRAY_BUFFER,0,6*graphics.tail.count*size_of(float),graphics.tail.data);
 
         start : s32 = 0;
         for #v2 < cut : graphics.tail_cuts {
-            glDrawArrays(GL_TRIANGLE_STRIP,start,xx (cut-start));
+            glDrawArrays(GL_TRIANGLE_STRIP,start, xx (cut-start));
             start = cut;
         }
-        glDrawArrays(GL_TRIANGLE_STRIP,start, xx (graphics.tail.count-start));
+        glDrawArrays(GL_TRIANGLE_STRIP,start, xx (((graphics.tail.count)-start)));
     }
 
     //****************
     //Drawing Head
     //****************
     glUseProgram(sprite_shader);
-    if false{
+    {
         angle := angle_between(.{0,-1}, direction);
         set_from_axis_and_angle(*head_rotation,.{0,0,1},xx angle);
         head_model :=  translate(Matrix4_Identity,cycle3(snake.head)) * scale(Matrix4_Identity,Vector3.{1,1,1}*HEAD_SIZE*2 * (snake.height+1)) * rotate(Matrix4_Identity,head_rotation);
@@ -1505,6 +1503,14 @@ render :: () {
 
     	glUniform4f(lines_tint_location,1,0,0,1);
     	glDrawArrays(GL_LINES,0,xx (grid_vertices.count/2));
+
+        i := 0;
+    	while i < snake.tail.count-1 {
+    	   defer i+= 1;
+    	   t_tail := tprint("%",i);
+    	   pos := cycle(snake.tail[i]);
+    	   render_text(t_tail,pos.x,pos.y,0.35,.{0,1,0}, *transpose(projection));
+    	}
     }
 
 

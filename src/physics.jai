@@ -49,6 +49,7 @@ point_to_grid :: (point : Vector2) -> int,int {
 
 resolve_collisions :: () {
 
+return;
     //Update collision grid:
     reset_collision_grid();
 
